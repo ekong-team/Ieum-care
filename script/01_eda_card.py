@@ -4,8 +4,8 @@ import pandas as pd
 
 
 # 1. 폴더 설정
-# 이 파일 위치: Ieum-care/ai/risk_model/01_eda_card.py
-repo_dir = Path(__file__).resolve().parents[2]
+# 이 파일 위치: Ieum-care/script/01_eda_card.py
+repo_dir = Path(__file__).resolve().parents[1]
 
 # 원본 데이터는 Ieum-care 바깥의 기존 폴더에 있음
 data_dir = (
