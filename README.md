@@ -1,5 +1,37 @@
 # Ieum care
 
+## 폴더 구조
+
+```text
+Ieum-care/
+├─ frontend/
+├─ backend/
+├─ ai/
+│  ├─ risk_model/
+│  ├─ welfare_agent/
+│  └─ evaluation/
+├─ data/
+│  ├─ raw/
+│  ├─ processed/
+│  │  ├─ telecom_features.csv
+│  │  ├─ card_features.csv
+│  │  └─ risk_features.csv
+│  └─ external/
+├─ scripts/
+│  └─ data_processing/
+│     ├─ build_telecom_features.py
+│     └─ build_card_features.py
+├─ docs/
+├─ .gitignore
+└─ README.md
+```
+
+`processed`의 세 CSV 이름은 최종 산출물 구조를 나타내며, 실제 생성 여부는 처리 단계에 따라 다릅니다.
+원본과 처리 결과 데이터는 Git에 업로드하지 않고 로컬에 보관합니다.
+현재 카드 스크립트는 중간 집계 CSV 4개를 생성합니다. `card_features.csv`와
+`risk_features.csv`의 생성은 특징 설계와 통신·카드 결합 단계에서 진행합니다.
+현재 카드 원본 경로는 저장소 상위 폴더의 제공 데이터 폴더를 사용합니다.
+
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발
 
