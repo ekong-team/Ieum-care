@@ -7,11 +7,8 @@ import pandas as pd
 # 이 파일 위치: Ieum-care/scripts/data_processing/build_card_features.py
 repo_dir = Path(__file__).resolve().parents[2]
 
-# 원본 데이터는 Ieum-care 바깥의 기존 폴더에 있음
-data_dir = (
-    repo_dir.parent
-    / "2026빅콘테스트_신한카드_데이터_레이아웃"
-)
+# 카드·통신 ZIP을 data/raw에 풀어 원본 파일을 보관
+data_dir = repo_dir / "data" / "raw"
 
 # 결과 CSV는 Git 업로드에서 제외되는 폴더에 저장
 output_dir = repo_dir / "data" / "processed"
@@ -205,20 +202,62 @@ for source_col, result_col in [
         )
 
 
-# 15. 결과 저장
-outputs = {
-    "card1_monthly_region_age.csv": card_monthly,
-    "card1_monthly_region_age_industry.csv": card_by_industry,
-    "card1_monthly_region_age_group.csv": card_by_group,
-    "card2_monthly_region_residence_age.csv": card2_monthly
-}
+# 15. 최종 카드 특징: 한 행 = 월 × 가맹점 지역 × 연령
+# 카드1·2는 겹치는 결제가 있을 수 있으므로 출처별 수치를 더하지 않음.
+feature_keys = ["월", "지역", "연령대"]
+card1_totals = card_monthly.rename(columns={
+    "카드_결제금액": "카드1_전체_결제금액",
+    "카드_결제건수": "카드1_전체_결제건수"
+})
 
-for filename, table in outputs.items():
-    table.to_csv(
-        output_dir / filename,
-        index=False,
-        encoding="utf-8-sig"
+# 그룹별 행을 열로 펼침. 해당 카드1 키 안에 없는 그룹은 관측 기록 0건.
+group_wide = card_by_group.pivot(
+    index=feature_keys,
+    columns="업종그룹",
+    values=["카드_결제금액", "카드_결제건수"]
+).fillna(0)
+group_wide.columns = [
+    f"카드1_{group}_{metric.removeprefix('카드_')}"
+    for metric, group in group_wide.columns
+]
+group_wide = group_wide.astype("int64").reset_index()
+
+# 카드2의 모든 거주지(정보없음 포함)를 합쳐 동일한 행 기준으로 요약.
+# 상세 거주지 표는 위 card2_monthly 변수에 유지.
+card2_totals = (
+    card2_monthly.rename(columns={"가맹점지역": "지역"})
+    .groupby(feature_keys, as_index=False, dropna=False)
+    [["카드2_결제금액", "카드2_결제건수"]].sum()
+)
+
+card_features = (
+    card1_totals.merge(group_wide, on=feature_keys, validate="one_to_one")
+    .merge(
+        card2_totals, on=feature_keys, how="outer",
+        validate="one_to_one", indicator="출처매칭"
     )
+    .sort_values(feature_keys).reset_index(drop=True)
+)
+if not card_features["출처매칭"].eq("both").all():
+    raise ValueError("카드1·2의 월·지역·연령 키가 다릅니다. 누락을 확인하세요.")
+card_features = card_features.drop(columns="출처매칭")
+
+# 최종 표에서도 출처별 합계와 그룹 합계가 보존되는지 확인.
+for metric in ["결제금액", "결제건수"]:
+    group_columns = [
+        f"카드1_{group}_{metric}"
+        for group in list(industry_groups) + ["미분류"]
+    ]
+    if not card_features[group_columns].sum(axis=1).eq(
+        card_features[f"카드1_전체_{metric}"]
+    ).all():
+        raise ValueError(f"그룹별 {metric} 합계가 전체와 다릅니다.")
+    if card_features[f"카드2_{metric}"].sum() != card2_totals[f"카드2_{metric}"].sum():
+        raise ValueError(f"최종 카드2 {metric} 합계가 다릅니다.")
+
+# 새 실행에서는 최종 CSV 하나만 저장. 기존 중간 CSV는 삭제하지 않음.
+output_file = output_dir / "card_features.csv"
+card_features.to_csv(output_file, index=False, encoding="utf-8-sig")
 
 
 # 16. 실행 결과 요약
@@ -227,7 +266,6 @@ print("카드1 개인 기록:", card1_personal.shape)
 print("카드2 원본:", card2.shape)
 print("카드1·2 각각 집계 전후 금액·건수 합계 일치")
 
-for filename, table in outputs.items():
-    print(f"저장 완료: {filename} / {table.shape}")
+print(f"최종 저장 완료: {output_file.name} / {card_features.shape}")
 
 print("결과 저장 폴더:", output_dir)
