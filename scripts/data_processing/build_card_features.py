@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from industry_classification import ALL_GROUPS, classify_industries, classification_table
+
 
 # 1. 폴더 설정
 # 이 파일 위치: Ieum-care/scripts/data_processing/build_card_features.py
@@ -23,19 +25,8 @@ age_mapping = {
     "90대": "60대이상"
 }
 
-# 초기 분류이며, 목록에 없는 업종은 미분류로 보존
-industry_groups = {
-    "외식·카페": [
-        "한식", "중식", "일식", "양식",
-        "기타요식", "패스트푸드", "커피전문점", "제과점"
-    ],
-    "문화·오락": [
-        "영화/공연", "노래방", "게임방/오락실"
-    ],
-    "운동": [
-        "헬스장", "스포츠시설", "실내/실외골프장"
-    ]
-}
+# 업종 분류는 industry_classification.py에서 EDA와 공통으로 관리한다.
+# 알려진 포괄 업종은 '해석보류', 새로 등장한 업종은 '미분류'로 남긴다.
 
 
 # 3. 카드 데이터1 읽기
@@ -109,13 +100,7 @@ card_by_industry = (
 
 
 # 8. 카드1 업종 그룹 지정
-card_by_industry["업종그룹"] = "미분류"
-
-for group_name, industries in industry_groups.items():
-    card_by_industry.loc[
-        card_by_industry["업종"].isin(industries),
-        "업종그룹"
-    ] = group_name
+card_by_industry["업종그룹"] = classify_industries(card_by_industry["업종"])
 
 
 # 9. 카드1: 월 × 가맹점 지역 × 연령 × 업종그룹
@@ -215,7 +200,11 @@ group_wide = card_by_group.pivot(
     index=feature_keys,
     columns="업종그룹",
     values=["카드_결제금액", "카드_결제건수"]
-).fillna(0)
+)
+# 관측되지 않은 그룹도 열로 유지하여 실행마다 CSV 구조가 바뀌지 않게 한다.
+group_wide = group_wide.reindex(columns=pd.MultiIndex.from_product(
+    [["카드_결제금액", "카드_결제건수"], ALL_GROUPS]
+)).fillna(0)
 group_wide.columns = [
     f"카드1_{group}_{metric.removeprefix('카드_')}"
     for metric, group in group_wide.columns
@@ -246,7 +235,7 @@ card_features = card_features.drop(columns="출처매칭")
 for metric in ["결제금액", "결제건수"]:
     group_columns = [
         f"카드1_{group}_{metric}"
-        for group in list(industry_groups) + ["미분류"]
+        for group in ALL_GROUPS
     ]
     if not card_features[group_columns].sum(axis=1).eq(
         card_features[f"카드1_전체_{metric}"]
@@ -258,6 +247,16 @@ for metric in ["결제금액", "결제건수"]:
 # 새 실행에서는 최종 CSV 하나만 저장. 기존 중간 CSV는 삭제하지 않음.
 output_file = output_dir / "card_features.csv"
 card_features.to_csv(output_file, index=False, encoding="utf-8-sig")
+
+# 실제 관측 업종별 분류표도 저장. 근거·주의사항과 미분류를 팀이 검토 가능.
+review = card_by_industry.groupby("업종", dropna=False)[
+    ["카드_결제금액", "카드_결제건수"]
+].sum().reset_index().merge(classification_table(), on="업종", how="left", validate="one_to_one")
+review["업종그룹"] = review["업종그룹"].fillna("미분류")
+review["해석역할"] = review["해석역할"].fillna("해석보류")
+review["분류근거"] = review["분류근거"].fillna("신규 업종: 분류 기준 검토 필요")
+review["주의사항"] = review["주의사항"].fillna("검토 전 위험 점수에 사용하지 않음")
+review.to_csv(output_dir / "industry_classification_review.csv", index=False, encoding="utf-8-sig")
 
 
 # 16. 실행 결과 요약

@@ -12,6 +12,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from industry_classification import RULES
+
 
 # 1. 경로와 결합 기준
 PROCESSED_DIR = Path(__file__).resolve().parents[2] / "data" / "processed"
@@ -166,6 +168,18 @@ def add_card_features(card):
     for col in list(card.columns):
         if col.startswith("카드1_") and "전체" not in col and col.endswith("_결제건수"):
             card[f"{col}_비중"] = safe_ratio(card[col], card["카드1_전체_결제건수"])
+    # 후보 업종 합계는 실제 대인 교류가 아니라 해당 업종에서의 관측 결제다.
+    # 해석보류/미분류를 포함한 전체 건수를 분모로 유지하며 비중을 부풀리지 않음.
+    candidate_cols = [f"카드1_{name}_결제건수" for name, rule in RULES.items()
+                      if rule[0] == "사회활동관련_후보"]
+    card["카드1_사회활동관련후보_결제건수"] = card[candidate_cols].sum(axis=1, min_count=len(candidate_cols))
+    candidate = card["카드1_사회활동관련후보_결제건수"]
+    card["카드1_사회활동관련후보_건수비중"] = safe_ratio(candidate, card["카드1_전체_결제건수"])
+    group_keys = [card["지역"], card["연령대"]]
+    previous = candidate.groupby(group_keys).shift(1)
+    card["카드1_사회활동관련후보_건수전월변화율"] = (safe_ratio(candidate, previous) - 1).where(adjacent)
+    # 비중 변화는 상대 변화율이 아닌 차이: -0.01 = 1%p 하락.
+    card["카드1_사회활동관련후보_비중전월차이"] = card["카드1_사회활동관련후보_건수비중"].groupby(group_keys).diff().where(adjacent)
     return card
 
 

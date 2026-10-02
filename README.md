@@ -20,7 +20,10 @@ Ieum-care/
 ├─ scripts/
 │  └─ data_processing/
 │     ├─ build_telecom_features.py
-│     └─ build_card_features.py
+│     ├─ build_card_features.py
+│     ├─ industry_classification.py
+│     ├─ build_risk_features.py
+│     └─ analyze_risk_features.py
 ├─ docs/
 ├─ .gitignore
 └─ README.md
@@ -28,16 +31,30 @@ Ieum-care/
 
 `processed`의 세 CSV 이름은 최종 산출물 구조를 나타내며, 실제 생성 여부는 처리 단계에 따라 다릅니다.
 원본과 처리 결과 데이터는 Git에 업로드하지 않고 로컬에 보관합니다.
-카드 스크립트는 `card_features.csv` 하나를 생성합니다. 한 행은 월×가맹점 지역×연령이며,
+카드 스크립트는 `card_features.csv`와 업종 검토용 `industry_classification_review.csv`를 생성합니다. 특징의 한 행은 월×가맹점 지역×연령이며,
 카드1 전체 금액·건수, 업종그룹별 금액·건수, 카드2 전체 금액·건수를 출처별 열로 보존합니다.
 카드1·2 수치를 서로 더하지 않습니다. 고객 거주지는 카드2 합계에서 모두 포함하며,
 이 표는 거주민만의 소비를 나타내지 않습니다. 업종그룹에 기록이 없는 경우의 0은
-제공 데이터의 관측 기록 기준입니다. 업종 분류는 초기안이며 위험도 검증을 의미하지 않습니다.
+제공 데이터의 관측 기록 기준입니다. 업종 분류 v2는 활동 목적별 분류안이며 위험도 검증을 의미하지 않습니다.
+분류 정의는 `industry_classification.py`, 업종별 배정과 주의사항은 [업종 분류 문서](docs/industry_classification.md)에 있습니다.
+알려진 포괄 업종은 `해석보류`, 분류표에 없는 새 업종은 `미분류`로 유지합니다.
 기존 중간 CSV 4개는 로컬에 보존하지만 새 실행에서는 다시 생성하지 않습니다.
-`risk_features.csv`는 통신·카드 결합 단계에서 생성할 예정입니다.
+`risk_features.csv`는 통신을 지역별로 요약한 뒤 카드와 월×지역×연령 단위로 결합한 특징 표입니다.
+사회활동 관련 후보 업종의 건수·비중·전월 변화도 포함하며, 실제 교류나 고립 정답을 나타내지 않습니다.
+위험 점수와 5단계 분류는 아직 구현 전입니다.
 카드·통신 데이터와 테이블 정의서 ZIP은 로컬의 `data/raw/`에 압축 해제합니다.
 카드 TXT와 통신 `flow_*.csv` 파일은 `data/raw/` 바로 아래에 놓습니다.
 카드 스크립트는 이 경로에서 원본을 읽고 `data/processed/`에 결과를 저장합니다.
+
+업종 분류 변경 후 아래 순서로 특징과 EDA를 다시 생성합니다. 통신 원본/전처리 변경 시에는 통신 스크립트부터 실행합니다.
+
+```bash
+python scripts/data_processing/build_card_features.py
+python scripts/data_processing/build_risk_features.py
+python scripts/data_processing/analyze_risk_features.py
+```
+
+EDA 보고서와 분석표는 `data/processed/eda/`에 저장되며 Git에서 제외됩니다.
 
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발
