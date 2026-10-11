@@ -87,12 +87,28 @@ def main():
                         "spatial_validation_exceptions.csv", "spatial_validation_monthly.csv"]]
         else:
             spatial_status = "공간 검증 기록의 입력/코드 해시가 달라 재실행 필요"
+    industry_status = "업종 처리 가정의 민감도 분석 미실행"
+    industry_report = PROCESSED / "industry_sensitivity_summary.json"
+    if industry_report.exists():
+        industry = json.loads(industry_report.read_text(encoding="utf-8"))
+        fresh = (industry["classification_version"] == VERSION
+                 and all((REPO / name).exists() and file_hash(REPO / name) == digest
+                         for name, digest in industry["sha256"].items()))
+        if fresh:
+            industry_status = "민감도 분석 완료, 상세 업종 의미 확인은 보류: " + industry["status"]
+            files += [industry_report]
+            files += [PROCESSED / name for name in ["industry_held_review.csv",
+                "industry_interpretation_coverage.csv", "industry_sensitivity_features.csv",
+                "industry_sensitivity_comparison.csv"]]
+        else:
+            industry_status = "업종 민감도 기록의 입력/코드 해시가 달라 재실행 필요"
     manifest = {
         "status": "passed", "validated_at_utc": datetime.now(timezone.utc).isoformat(),
         "python": platform.python_version(), "pandas": pd.__version__, "numpy": np.__version__,
         "classification_version": VERSION, "months": MONTHS,
         "card_shape": list(card.shape), "risk_shape": list(risk.shape),
         "spatial_validation": spatial_status,
+        "industry_sensitivity": industry_status,
         "limitations": ["해석보류 업종은 분류 의미가 확정되지 않음", "관측률은 인구 대표성 지표가 아님",
                         "집계 특징이며 개인의 고립 라벨이나 검증된 위험 점수가 아님"],
         "sha256": {path.relative_to(REPO).as_posix(): file_hash(path) for path in sorted(files)},

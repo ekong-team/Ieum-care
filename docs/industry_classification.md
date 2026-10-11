@@ -150,6 +150,9 @@ python scripts/data_processing/analyze_risk_features.py
 
 ## 다음 검증 과제
 
+해석보류 처리 기준과 4가지 가정의 민감도 결과는 [업종 검증 기록](industry_validation.md)에 정리했다.
+민감도 분석은 `analyze_industry_sensitivity.py`로 재현하며 분류 v2와 기본 특징은 유지한다.
+
 - 포괄 업종의 세부 정의와 거래 범위를 원본 제공 문서로 확인한다.
 - 후보 업종 포함/제외를 바꾸었을 때 지역·연령별 결과가 얼마나 달라지는지 비교한다.
 - 업종 구매의 변화와 고립 위험의 관계는 외부 근거·전문가 검토로 확인한다.
