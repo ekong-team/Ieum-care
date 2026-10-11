@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from industry_classification import ALL_GROUPS, classify_industries, classification_table
+from data_contract import validate_card_raw, require_keys
 
 
 # 1. 폴더 설정
@@ -36,6 +37,7 @@ card1 = pd.read_csv(
     encoding="cp949",
     dtype=str
 )
+validate_card_raw(card1, "카드1 원본")
 
 
 # 4. 법인 표시 일치 확인 후 개인 기록 선택
@@ -136,6 +138,9 @@ card2 = pd.read_csv(
     encoding="cp949",
     dtype=str
 )
+validate_card_raw(card2, "카드2 원본")
+if card2["AGE_CCD"].eq("법인").any() or card2["SEX_CCD"].eq("법인").any():
+    raise ValueError("법인이 제외된 카드2에 법인 기록이 있습니다.")
 
 
 # 12. 카드2 정제
@@ -230,6 +235,7 @@ card_features = (
 if not card_features["출처매칭"].eq("both").all():
     raise ValueError("카드1·2의 월·지역·연령 키가 다릅니다. 누락을 확인하세요.")
 card_features = card_features.drop(columns="출처매칭")
+require_keys(card_features, feature_keys, "최종 카드 특징")
 
 # 최종 표에서도 출처별 합계와 그룹 합계가 보존되는지 확인.
 for metric in ["결제금액", "결제건수"]:

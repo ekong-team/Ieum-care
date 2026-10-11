@@ -13,21 +13,19 @@ import numpy as np
 import pandas as pd
 
 from industry_classification import RULES
+from data_contract import AGES, REGIONS, require_months
 
 
 # 1. 경로와 결합 기준
 PROCESSED_DIR = Path(__file__).resolve().parents[2] / "data" / "processed"
 KEYS = ["월", "지역", "연령대"]
 LOCATION = ["BLOCK_CD", "X_COORD", "Y_COORD"]
-AGES = {"10G": "10대", "20G": "20대", "30G": "30대",
-        "40G": "40대", "50G": "50대", "60GU": "60대이상"}
 
 # 소지역코드 앞 5자리의 통계청 지역코드 사용. 행안부 코드와 다름.
 # 강남구: https://sgis.kostat.go.kr/developer/upload/doc/SGIS_OpenAPI_정의서.pdf
 # 춘천시: https://mlib1.kostat.go.kr/search/detail/CATTOT000000042001
 # 원본의 좌표 기반 소지역과 이 코드가 일치하는지는 별도 공간 검증 대상이다.
 # 주변 지역 코드를 강남/춘천으로 강제 변환하지 않는다.
-REGIONS = {"11230": "서울 강남구", "32010": "강원 춘천시"}
 TIME_COLS = ["TIME_FLOW_TOTAL", "FLOW_DAWN", "FLOW_DAYTIME", "FLOW_EVENING"]
 WEEK_COLS = ["WEEKDAY_AVG", "WEEKEND_AVG", "WEEK_AVG"]
 
@@ -70,6 +68,7 @@ def load_inputs():
         if not df["월"].str.fullmatch(r"\d{6}").all():
             raise ValueError("월은 YYYYMM 형식이어야 합니다.")
         pd.to_datetime(df["월"], format="%Y%m", errors="raise")
+        require_months(df["월"], "입력 특징")
     if not card["연령대"].isin(AGES.values()).all():
         raise ValueError("카드에 지원하지 않는 연령대가 있습니다.")
     if not card["지역"].isin(REGIONS.values()).all():

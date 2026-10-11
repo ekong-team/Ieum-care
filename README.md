@@ -22,9 +22,14 @@ Ieum-care/
 │     ├─ build_telecom_features.py
 │     ├─ build_card_features.py
 │     ├─ industry_classification.py
+│     ├─ data_contract.py
 │     ├─ build_risk_features.py
-│     └─ analyze_risk_features.py
+│     ├─ analyze_risk_features.py
+│     ├─ validate_processed.py
+│     └─ run_preprocessing.py
 ├─ docs/
+├─ tests/
+├─ requirements.txt
 ├─ .gitignore
 └─ README.md
 ```
@@ -55,6 +60,18 @@ python scripts/data_processing/analyze_risk_features.py
 ```
 
 EDA 보고서와 분석표는 `data/processed/eda/`에 저장되며 Git에서 제외됩니다.
+
+전체 정제·EDA·최종 검증은 Python 3.12 환경에서 다음과 같이 실행합니다.
+
+```bash
+python -m pip install -r requirements.txt
+python scripts/data_processing/run_preprocessing.py
+python -m unittest discover -s tests -v
+```
+
+실행 환경, 결측·중복 처리, 단위, 지역 매핑의 검증 범위는 [정제 기준과 재현 방법](docs/data_preprocessing.md)에 있습니다.
+`preprocessing_manifest.json`에는 입력·코드·주요 결과 해시와 환경 버전이 기록됩니다.
+좌표와 실제 행정경계의 공간 대조는 아직 수행하지 않았으며, 위험도 개발 시 별도 검증이 필요합니다.
 
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발
