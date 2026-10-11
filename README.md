@@ -25,11 +25,17 @@ Ieum-care/
 │     ├─ data_contract.py
 │     ├─ build_risk_features.py
 │     ├─ analyze_risk_features.py
+│     ├─ audit_region_mapping.py
+│     ├─ validate_region_boundaries.py
+│     ├─ analyze_spatial_sensitivity.py
+│     ├─ analyze_industry_sensitivity.py
+│     ├─ audit_model_inputs.py
 │     ├─ validate_processed.py
 │     └─ run_preprocessing.py
 ├─ docs/
 ├─ tests/
 ├─ requirements.txt
+├─ requirements-spatial.txt
 ├─ .gitignore
 └─ README.md
 ```
@@ -71,7 +77,23 @@ python -m unittest discover -s tests -v
 
 실행 환경, 결측·중복 처리, 단위, 지역 매핑의 검증 범위는 [정제 기준과 재현 방법](docs/data_preprocessing.md)에 있습니다.
 `preprocessing_manifest.json`에는 입력·코드·주요 결과 해시와 환경 버전이 기록됩니다.
-좌표와 실제 행정경계의 공간 대조는 아직 수행하지 않았으며, 위험도 개발 시 별도 검증이 필요합니다.
+2025년 2분기 SGIS 경계로 조건부 공간 대조를 수행했고 대상 좌표 2개 예외를 기록했습니다.
+원본 좌표계·좌표 의미 및 보류 업종 상세 정의는 제공기관 확인 사항으로 남아 있습니다.
+공간 검증은 [지역 매핑 검증](docs/spatial_validation.md), 업종 처리 기준과 민감도는
+[업종 검증 기록](docs/industry_validation.md), 특징별 목적·결측·관측 범위는
+[모델 입력 검토](docs/model_input_review.md)에 정리했습니다.
+
+정제 후 아래 분석을 실행하면 기존 특징을 유지하면서 검토표를 생성합니다.
+
+```bash
+python scripts/data_processing/analyze_industry_sensitivity.py
+python scripts/data_processing/audit_model_inputs.py
+python scripts/data_processing/validate_processed.py
+```
+
+공간 검증에는 별도로 `requirements-spatial.txt` 설치와 SGIS 경계 원본이 필요합니다.
+입력 검토 후보 3개는 탐색용이며, 위험 점수·5단계·정확도는 아직 구현·검증 전입니다.
+iPad Codespaces에서 필요한 데이터·설치·실행 순서는 [Codespaces 작업 안내](docs/codespaces_workflow.md)에 있습니다.
 
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발

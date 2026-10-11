@@ -102,6 +102,20 @@ def main():
                 "industry_sensitivity_comparison.csv"]]
         else:
             industry_status = "업종 민감도 기록의 입력/코드 해시가 달라 재실행 필요"
+    input_status = "모델 입력 후보 검토 미실행"
+    input_report = PROCESSED / "model_input_review_summary.json"
+    if input_report.exists():
+        input_review = json.loads(input_report.read_text(encoding="utf-8"))
+        fresh = all((REPO / name).exists() and file_hash(REPO / name) == digest
+                    for name, digest in input_review["sha256"].items())
+        if fresh:
+            input_status = "관측·결측·중복 정보 검토 완료, 위험도 설계 전: " + input_review["status"]
+            files += [input_report]
+            files += [PROCESSED / name for name in ["model_feature_review.csv",
+                "model_feature_missingness.csv", "model_feature_correlations.csv",
+                "model_region_context_review.csv", "model_input_review.csv"]]
+        else:
+            input_status = "모델 입력 검토 기록의 입력/코드 해시가 달라 재실행 필요"
     manifest = {
         "status": "passed", "validated_at_utc": datetime.now(timezone.utc).isoformat(),
         "python": platform.python_version(), "pandas": pd.__version__, "numpy": np.__version__,
@@ -109,6 +123,7 @@ def main():
         "card_shape": list(card.shape), "risk_shape": list(risk.shape),
         "spatial_validation": spatial_status,
         "industry_sensitivity": industry_status,
+        "model_input_review": input_status,
         "limitations": ["해석보류 업종은 분류 의미가 확정되지 않음", "관측률은 인구 대표성 지표가 아님",
                         "집계 특징이며 개인의 고립 라벨이나 검증된 위험 점수가 아님"],
         "sha256": {path.relative_to(REPO).as_posix(): file_hash(path) for path in sorted(files)},
