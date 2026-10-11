@@ -69,12 +69,30 @@ def main():
     files += list(Path(__file__).parent.glob("*.py")) + [REPO / "requirements.txt"]
     files += [PROCESSED / name for name in ["telecom_features.csv", "card_features.csv", "risk_features.csv",
                                            "region_mapping_review.csv", "industry_classification_review.csv"]]
+    spatial_status = "지역코드 기반 매핑. 좌표와 행정경계의 대조는 미검증"
+    spatial_report = PROCESSED / "spatial_validation_summary.json"
+    if spatial_report.exists():
+        spatial = json.loads(spatial_report.read_text(encoding="utf-8"))
+        boundary = REPO / "data" / "external" / "sgis" / spatial["boundary_file"]
+        spatial_script = Path(__file__).parent / "validate_region_boundaries.py"
+        fresh = (boundary.exists()
+                 and spatial["sha256"]["telecom_features"] == file_hash(PROCESSED / "telecom_features.csv")
+                 and spatial["sha256"]["boundary_zip"] == file_hash(boundary)
+                 and spatial["sha256"]["script"] == file_hash(spatial_script))
+        if fresh:
+            spatial_status = ("EPSG:5179 가정으로 경계 대조 완료. 예외와 제공기관 CRS 확인은 별도 기록: "
+                              + spatial["status"])
+            files += [spatial_report, boundary]
+            files += [PROCESSED / name for name in ["spatial_validation_locations.csv",
+                        "spatial_validation_exceptions.csv", "spatial_validation_monthly.csv"]]
+        else:
+            spatial_status = "공간 검증 기록의 입력/코드 해시가 달라 재실행 필요"
     manifest = {
         "status": "passed", "validated_at_utc": datetime.now(timezone.utc).isoformat(),
         "python": platform.python_version(), "pandas": pd.__version__, "numpy": np.__version__,
         "classification_version": VERSION, "months": MONTHS,
         "card_shape": list(card.shape), "risk_shape": list(risk.shape),
-        "spatial_validation": "지역코드 기반 매핑. 좌표와 행정경계의 대조는 미검증",
+        "spatial_validation": spatial_status,
         "limitations": ["해석보류 업종은 분류 의미가 확정되지 않음", "관측률은 인구 대표성 지표가 아님",
                         "집계 특징이며 개인의 고립 라벨이나 검증된 위험 점수가 아님"],
         "sha256": {path.relative_to(REPO).as_posix(): file_hash(path) for path in sorted(files)},

@@ -16,6 +16,10 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
+# SGIS 원본 경계는 별도 공유하고 출처 문서만 버전 관리
+data/external/sgis/*
+!data/external/sgis/README.md
+
 # Node
 node_modules/
 dist/

@@ -1,0 +1,5 @@
+# 공간 검증을 실행할 때만 추가 설치
+-r requirements.txt
+shapely==2.1.2
+pyproj==3.7.2
+pyshp==2.3.1
