@@ -93,7 +93,6 @@ python scripts/data_processing/validate_processed.py
 
 공간 검증에는 별도로 `requirements-spatial.txt` 설치와 SGIS 경계 원본이 필요합니다.
 입력 검토 후보 3개는 탐색용이며, 위험 점수·5단계·정확도는 아직 구현·검증 전입니다.
-iPad Codespaces에서 필요한 데이터·설치·실행 순서는 [Codespaces 작업 안내](docs/codespaces_workflow.md)에 있습니다.
 
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발
