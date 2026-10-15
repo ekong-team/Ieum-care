@@ -8,7 +8,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ai" / "risk_model"))
 from classify_risk import (classify_risk, summarize_card_exclusions, compare_scenarios,
-                           analyze_sensitivity, TOTAL, MOVEMENT, FILTERED)
+                           analyze_sensitivity, review_temporal_quality, TOTAL, MOVEMENT, FILTERED)
 
 
 def sample(totals, movements, filtered=None, months=None, region="테스트지역", age="20대"):
@@ -154,6 +154,69 @@ class RiskSensitivityTests(unittest.TestCase):
         daily = comparisons.loc[comparisons["시나리오"].eq("daily_d03_s05")].iloc[0]
         self.assertEqual(daily["같은소비기준3_5대비단계변경수"], 0)
         self.assertEqual(daily["월합계3_5대비단계변경수"], 1)
+
+
+def quality_sample(data, flows, positions=None, coverages=None):
+    result = data[["월", "지역", "연령대"]].copy()
+    count = len(data)
+    result["통신_연령유동량"] = flows
+    result["통신_전체관측위치수"] = [100] * count
+    result["통신_연령관측위치수"] = positions if positions is not None else [99] * count
+    result["통신_연령관측률"] = coverages if coverages is not None else [.99] * count
+    for kind in ["시간", "요일"]:
+        result[f"통신_{kind}관측위치수"] = [100] * count
+        result[f"통신_{kind}관측률"] = [1.] * count
+    result["통신_전월공통위치비율"] = [np.nan] + [.98] * (count - 1)
+    result["카드1_해석보류_결제건수_비중"] = [.1] * count
+    return result
+
+
+class RiskTemporalReviewTests(unittest.TestCase):
+    def test_partial_and_held_are_not_counted_as_completed_transitions(self):
+        data = sample([10000, 9600, 9216, 9500], [np.nan, -.04, -.04, .01])
+        reviewed, region = review_temporal_quality(classify_risk(data), quality_sample(data, [1000, 960, 920, 950]))
+        self.assertEqual(reviewed["전이구분"].tolist(), ["전월자료없음", "보류포함", "부분판정포함", "하락"])
+        self.assertEqual(reviewed["완료끼리비교"].sum(), 1)
+        self.assertEqual(len(region), 4)
+
+    def test_month_gap_and_cohort_boundaries_are_not_bridged(self):
+        a = sample([10000, 10000, 10000], [np.nan, .01, .01], months=["202507", "202509", "202510"])
+        b = sample([100, 100, 100], [np.nan, .01, .01], months=["202507", "202509", "202510"], age="30대")
+        data = pd.concat([a, b], ignore_index=True)
+        features = pd.concat([quality_sample(a, [100, 100, 100]), quality_sample(b, [100, 100, 100])], ignore_index=True)
+        reviewed, region = review_temporal_quality(classify_risk(data), features)
+        self.assertEqual(len(region), 3)
+        self.assertFalse(reviewed.loc[reviewed["월"].eq("202509"), "전월연속자료있음"].any())
+        self.assertFalse(reviewed["전이구분"].isin(["상승", "하락"]).any())
+
+    def test_observation_range_change_is_context_not_a_grade_override(self):
+        data = sample([10000, 10000, 10000], [np.nan, 0., 0.])
+        baseline = classify_risk(data)
+        reviewed, _ = review_temporal_quality(baseline, quality_sample(data, [1000, 800, 600], [99, 80, 60], [.99, .8, .6]))
+        pd.testing.assert_series_equal(reviewed["위험단계"], baseline["위험단계"])
+        self.assertEqual(reviewed["관측범위감소동반"].sum(), 2)
+        self.assertEqual(reviewed.iloc[-1]["전이구분"], "유지")
+
+    def test_naive_sum_can_change_current_and_persistent_stage_without_changing_baseline(self):
+        data = sample([10000, 9600, 9216], [np.nan, -.04, -.04])
+        baseline = classify_risk(data)
+        reviewed, _ = review_temporal_quality(baseline, quality_sample(data, [1000, 980, 941]))
+        self.assertEqual(reviewed["위험단계"].iloc[1:].tolist(), [3, 4])
+        self.assertEqual(reviewed["단순유동기준단계"].iloc[1:].tolist(), [2, 3])
+        self.assertEqual(reviewed["단순유동기준단계변경"].sum(), 2)
+        self.assertEqual(reviewed["단순공통3퍼센트판정다름"].sum(), 1)
+
+    def test_region_context_is_not_multiplied_by_age(self):
+        a = sample([10000, 10000, 10000], [np.nan, .01, .01])
+        b = sample([100, 100, 100], [np.nan, .01, .01], age="30대")
+        features = pd.concat([quality_sample(a, [100, 100, 100]), quality_sample(b, [10, 10, 10])], ignore_index=True)
+        baseline = classify_risk(pd.concat([a, b], ignore_index=True))
+        reviewed, region = review_temporal_quality(baseline, features)
+        self.assertEqual(len(reviewed), 6)
+        self.assertEqual(len(region), 3)
+        features.loc[features["연령대"].eq("30대"), "통신_시간관측률"] = .5
+        with self.assertRaises(ValueError):
+            review_temporal_quality(baseline, features)
 
 
 if __name__ == "__main__":

@@ -112,6 +112,16 @@ python ai/risk_model/classify_risk.py --sensitivity
 일평균은 소비와 업종 제외 소비에만 적용하며 이동 변화율은 유지한다.
 비교 결과는 `data/processed/risk_model/sensitivity/`에 저장하고 기본 단계·임계값은 변경하지 않는다.
 
+월별 단계 전이와 관측 범위를 함께 점검하려면:
+
+```bash
+python ai/risk_model/classify_risk.py --review
+```
+
+연속 두 달이 모두 판정완료인 경우만 상승·하락·유지로 집계한다.
+관측률·위치 수 변화와 단순 유동량 합계 기준의 차이도 기록한다.
+`data/processed/risk_model/review/`에 저장하며 관측 품질을 이유로 기본 단계를 자동 변경하지 않는다.
+
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발
 

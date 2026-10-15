@@ -2,6 +2,7 @@
 
 실행: python ai/risk_model/classify_risk.py
 민감도 검증: python ai/risk_model/classify_risk.py --sensitivity
+월별 전이·관측 범위 점검: python ai/risk_model/classify_risk.py --review
 원본·정제 특징은 유지하며 data/processed/risk_model/에 결과와 재현 기록을 저장한다.
 개인의 고립 여부·확률을 예측하는 학습 모델이 아니다.
 """
@@ -259,7 +260,8 @@ def analyze_sensitivity(inputs):
     return pd.DataFrame(rows), pd.concat(detail_tables, ignore_index=True), baseline
 
 
-def run_sensitivity():
+def load_verified_baseline():
+    """분석 기능들이 기본 판정의 입력·값·결측을 같은 방식으로 대조한다."""
     inputs, sources = load_inputs()
     baseline_path = OUTPUT / "risk_levels.csv"
     baseline_record = OUTPUT / "summary.json"
@@ -271,13 +273,20 @@ def run_sensitivity():
     for path in sources + [baseline_path, REPO / "docs" / "risk_model_design.md"]:
         if saved["sha256"].get(path.relative_to(REPO).as_posix()) != file_hash(path):
             raise ValueError(f"기본 판정 기록이 오래됐습니다: {path.name}. 기본 판정부터 다시 실행하세요.")
-    saved_hash = file_hash(baseline_path)
-    comparisons, details, baseline = analyze_sensitivity(inputs)
+    baseline = classify_risk(inputs)
     # CSV의 빈 조건값을 NaN/False로 바꾸지 않고 미확인(boolean NA)으로 복원한다.
     types = {**{key: str for key in KEYS}, "위험단계": "Int64"}
     types.update({column: "boolean" for column in baseline.select_dtypes(include="boolean")})
     stored = pd.read_csv(baseline_path, dtype=types)
     pd.testing.assert_frame_equal(baseline, stored, check_dtype=False)
+    return inputs, sources + [baseline_path, baseline_record, REPO / "docs" / "risk_model_design.md"], baseline, file_hash(baseline_path)
+
+
+def run_sensitivity():
+    inputs, sources, baseline, saved_hash = load_verified_baseline()
+    comparisons, details, recalculated = analyze_sensitivity(inputs)
+    pd.testing.assert_frame_equal(baseline, recalculated)
+    baseline_path = OUTPUT / "risk_levels.csv"
     folder = OUTPUT / "sensitivity"
     case_path, detail_path = folder / "scenarios.csv", folder / "details.csv"
     comparisons.to_csv(case_path, index=False, encoding="utf-8-sig")
@@ -301,24 +310,138 @@ def run_sensitivity():
             "부분판정은 하한. 전체 비교와 양쪽 판정완료 비교를 구분",
             "시나리오 반복 행은 추가 독립 표본이 아님. 7월 보류를 단계 변경으로 세지 않음"],
         "sha256": {p.relative_to(REPO).as_posix(): file_hash(p) for p in
-                   sources + [baseline_path, baseline_record, Path(__file__),
-                              REPO / "docs" / "risk_model_design.md", case_path, detail_path]}}
+                   sources + [Path(__file__), case_path, detail_path]}}
     (folder / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(comparisons[["시나리오", "월합계3_5대비단계변경수", "같은소비기준3_5대비단계변경수"]].to_string(index=False))
     print("일수 점검:", json.dumps(summary["calendar_case"], ensure_ascii=False))
 
 
+REGION_QUALITY = ["통신_전체관측위치수", "통신_연령관측위치수", "통신_연령관측률",
+                  "통신_시간관측위치수", "통신_시간관측률", "통신_요일관측위치수", "통신_요일관측률"]
+
+
+def review_temporal_quality(baseline, features):
+    """연속 월의 완료 판정끼리 전이를 집계하고 관측 범위 변화는 설명용으로 남긴다."""
+    feature_columns = REGION_QUALITY + ["통신_연령유동량", "통신_전월공통위치비율",
+                                        "카드1_해석보류_결제건수_비중"]
+    require_columns(features, KEYS + feature_columns, "관측 범위 검토")
+    require_keys(features, KEYS, "관측 범위 검토")
+    require_keys(baseline, KEYS, "기본 판정 검토")
+    overlap = [col for col in feature_columns if col in baseline]
+    for col in overlap:
+        pd.testing.assert_series_equal(baseline.set_index(KEYS).sort_index()[col],
+            features.set_index(KEYS).sort_index()[col], check_dtype=False)
+    extra = [col for col in feature_columns if col not in baseline]
+    data = baseline.merge(features[KEYS + extra], on=KEYS, how="outer", validate="one_to_one", indicator=True)
+    if not data["_merge"].eq("both").all():
+        raise ValueError("판정 결과와 관측 범위 특징의 키가 다릅니다.")
+    data = data.drop(columns="_merge").sort_values(["지역", "연령대", "월"]).reset_index(drop=True)
+    if data.groupby(["월", "지역"])[REGION_QUALITY].nunique(dropna=False).gt(1).any().any():
+        raise ValueError("지역 공통 관측 품질 값이 연령별로 다릅니다.")
+    groups = data.groupby(["지역", "연령대"])
+    month = pd.to_datetime(data["월"], format="%Y%m").dt.to_period("M").astype("int64")
+    adjacent = month.groupby([data["지역"], data["연령대"]]).diff().eq(1)
+    previous_columns = ["위험단계", "판정상태", "통신_연령유동량", "통신_연령관측위치수",
+                        "통신_연령관측률", "통신_전월공통위치비율", "카드1_해석보류_결제건수_비중"]
+    for col in previous_columns:
+        data[f"전월_{col}"] = groups[col].shift(1).where(adjacent)
+    data["전월연속자료있음"] = adjacent
+    data["양쪽단계있음"] = adjacent & data["위험단계"].notna() & data["전월_위험단계"].notna()
+    data["완료끼리비교"] = data["양쪽단계있음"] & data["판정상태"].eq("판정완료") & data["전월_판정상태"].eq("판정완료")
+    data["단계차이"] = (data["위험단계"] - data["전월_위험단계"]).where(data["양쪽단계있음"])
+    labels = []
+    for _, row in data.iterrows():
+        if not row["전월연속자료있음"]:
+            label = "전월자료없음"
+        elif row["완료끼리비교"]:
+            label = "상승" if row["단계차이"] > 0 else "하락" if row["단계차이"] < 0 else "유지"
+        else:
+            label = "부분판정포함" if row["양쪽단계있음"] else "보류포함"
+        labels.append(label)
+    data["전이구분"] = labels
+    for current, previous, name in [
+        ("통신_연령관측률", "전월_통신_연령관측률", "연령관측률전월차이"),
+        ("통신_전월공통위치비율", "전월_통신_전월공통위치비율", "공통위치비율전월차이"),
+        ("카드1_해석보류_결제건수_비중", "전월_카드1_해석보류_결제건수_비중", "해석보류비중전월차이")]:
+        data[name] = data[current] - data[previous]
+    data["연령관측위치수변화율"] = (safe_ratio(data["통신_연령관측위치수"], data["전월_통신_연령관측위치수"]) - 1).where(adjacent)
+    data["유동량단순변화율"] = (safe_ratio(data["통신_연령유동량"], data["전월_통신_연령유동량"]) - 1).where(adjacent)
+    data["관측범위감소동반"] = data[["연령관측률전월차이", "공통위치비율전월차이", "연령관측위치수변화율"]].lt(-1e-12).any(axis=1)
+    comparable_flow = data["유동량단순변화율"].notna() & data["이동변화율"].notna()
+    data["단순공통3퍼센트판정다름"] = comparable_flow & (
+        data["유동량단순변화율"].le(-DECLINE) != data["이동변화율"].le(-DECLINE))
+    # 단순 합계 비교는 진단용 반사실 비교이며, 기본 공통 위치 기준을 대체하지 않는다.
+    naive_input = data[KEYS + [TOTAL, FILTERED, MOVEMENT]].copy()
+    naive_input[MOVEMENT] = data["유동량단순변화율"]
+    naive = classify_risk(naive_input)
+    difference = compare_scenarios(baseline, naive).rename(columns={
+        "비교단계": "단순유동기준단계", "비교판정상태": "단순유동기준상태", "단계변경": "단순유동기준단계변경"})
+    data = data.merge(difference[KEYS + ["단순유동기준단계", "단순유동기준상태", "단순유동기준단계변경"]], on=KEYS, validate="one_to_one")
+    region = data[["월", "지역"] + REGION_QUALITY].drop_duplicates(["월", "지역"]).sort_values(["지역", "월"]).reset_index(drop=True)
+    region_month = pd.to_datetime(region["월"], format="%Y%m").dt.to_period("M").astype("int64")
+    region_adjacent = region_month.groupby(region["지역"]).diff().eq(1)
+    for kind in ["연령", "시간", "요일"]:
+        col = f"통신_{kind}관측률"
+        region[f"{kind}관측률전월차이"] = region.groupby("지역")[col].diff().where(region_adjacent)
+    return data.sort_values(KEYS).reset_index(drop=True), region.sort_values(["월", "지역"]).reset_index(drop=True)
+
+
+def run_review():
+    _, sources, baseline, saved_hash = load_verified_baseline()
+    feature_path = PROCESSED / "risk_features.csv"
+    features = pd.read_csv(feature_path, dtype={key: str for key in KEYS})
+    transitions, region = review_temporal_quality(baseline, features)
+    folder = OUTPUT / "review"
+    transitions_path, region_path = folder / "transitions.csv", folder / "region_quality.csv"
+    transitions.to_csv(transitions_path, index=False, encoding="utf-8-sig")
+    region.to_csv(region_path, index=False, encoding="utf-8-sig")
+    complete = transitions.loc[transitions["완료끼리비교"]]
+    matrix = complete.groupby(["전월_위험단계", "위험단계"]).size().reset_index(name="조합수")
+    monthly = [{"월": month, "연속월쌍수": int(group["전월연속자료있음"].sum()),
+        "완료끼리비교수": int(group["완료끼리비교"].sum()),
+        "상승수": int(group["전이구분"].eq("상승").sum()), "하락수": int(group["전이구분"].eq("하락").sum()),
+        "유지수": int(group["전이구분"].eq("유지").sum())} for month, group in transitions.groupby("월")]
+    summary = {"status": "passed", "review_version": "activity-review-v1", "baseline_rule_version": VERSION,
+        "run_at_utc": datetime.now(timezone.utc).isoformat(), "cohort_rows": len(transitions),
+        "region_month_rows": len(region), "adjacent_pairs": int(transitions["전월연속자료있음"].sum()),
+        "numeric_level_pairs_including_partial": int(transitions["양쪽단계있음"].sum()),
+        "completed_pairs": len(complete), "transition_counts": transitions["전이구분"].value_counts().to_dict(),
+        "rises_with_observation_range_decrease": int((transitions["전이구분"].eq("상승") & transitions["관측범위감소동반"]).sum()),
+        "observation_range_by_transition": complete.groupby(["전이구분", "관측범위감소동반"]).size().reset_index(name="조합수").to_dict("records"),
+        "naive_common_flow_threshold_disagreements": int(transitions["단순공통3퍼센트판정다름"].sum()),
+        "naive_flow_level_changes": int(transitions["단순유동기준단계변경"].sum()),
+        "completed_transition_matrix": matrix.to_dict("records"), "by_month": monthly,
+        "limitations": ["완료 판정끼리의 연속 월 비교만 상승·하락·유지로 집계",
+            "부분판정의 단계는 하한. 보류에서 숫자가 생긴 것을 상승으로 세지 않음",
+            "관측률은 합쳐진 위치 중 자료 존재 비율. 인구 대표성·정확도·위험 점수가 아님",
+            "관측범위감소동반은 세 관측 지표 중 하나가 전월 하락했다는 뜻. 오차 1e-12만 제외하며 품질 합격 기준은 아님",
+            "지역 공통값은 연령에 반복되므로 지역 품질 표는 월×지역 12개 조합만 기록",
+            "단순 유동 합계 기준 비교는 위치 구성 영향을 살피는 진단이며 새 판정 기준이 아님",
+            "월×지역×연령의 반복 비교이며 독립적인 개인 표본 수가 아님",
+            "관측 변화와 단계 변화의 동반은 인과관계나 실제 고립의 증거가 아님"],
+        "sha256": {p.relative_to(REPO).as_posix(): file_hash(p) for p in
+                   sources + [Path(__file__), transitions_path, region_path]}}
+    if file_hash(OUTPUT / "risk_levels.csv") != saved_hash:
+        raise ValueError("전이 검토 중 기본 CSV가 변경됐습니다.")
+    (folder / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({k: summary[k] for k in ["completed_pairs", "transition_counts",
+        "rises_with_observation_range_decrease", "naive_common_flow_threshold_disagreements", "naive_flow_level_changes"]}, ensure_ascii=False, indent=2))
+
+
 def main():
-    parser = argparse.ArgumentParser(description="팀 기준 5단계 분류 또는 임계값·월 길이 민감도 검증")
-    parser.add_argument("--sensitivity", action="store_true", help="기본 판정은 유지하고 18개 비교 시나리오만 실행")
+    parser = argparse.ArgumentParser(description="5단계 분류·민감도 검증·월별 전이/관측 범위 검토")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--sensitivity", action="store_true", help="기본 판정은 유지하고 18개 비교 시나리오만 실행")
+    mode.add_argument("--review", action="store_true", help="기본 판정은 유지하고 월별 전이·관측 범위만 검토")
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    folder = OUTPUT / "sensitivity" if args.sensitivity else OUTPUT
+    folder = OUTPUT / "sensitivity" if args.sensitivity else OUTPUT / "review" if args.review else OUTPUT
     folder.mkdir(parents=True, exist_ok=True)
     record = folder / "summary.json"
     record.write_text(json.dumps({"status": "running"}), encoding="utf-8")
     try:
-        run_sensitivity() if args.sensitivity else run()
+        action = run_sensitivity if args.sensitivity else run_review if args.review else run
+        action()
     except Exception as error:
         record.write_text(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False, indent=2), encoding="utf-8")
         raise
