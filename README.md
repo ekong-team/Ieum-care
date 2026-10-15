@@ -102,6 +102,16 @@ python ai/risk_model/classify_risk.py
 7월을 1단계로 대체하지 않으며 원본과 기존 특징은 유지한다.
 규칙과 실제 분포·제한 사항은 [위험 신호 설계](docs/risk_model_design.md)에 있다.
 
+임계값과 월별 일수의 영향을 확인하려면 기본 판정 실행 후 다음을 실행한다.
+
+```bash
+python ai/risk_model/classify_risk.py --sensitivity
+```
+
+감소 기준 2/3/4% × 큰 감소 기준 4/5/6% × 소비 월합계/일평균의 18개 시나리오를 비교한다.
+일평균은 소비와 업종 제외 소비에만 적용하며 이동 변화율은 유지한다.
+비교 결과는 `data/processed/risk_model/sensitivity/`에 저장하고 기본 단계·임계값은 변경하지 않는다.
+
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발
 

@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ai" / "risk_model"))
-from classify_risk import classify_risk, summarize_card_exclusions, TOTAL, MOVEMENT, FILTERED
+from classify_risk import (classify_risk, summarize_card_exclusions, compare_scenarios,
+                           analyze_sensitivity, TOTAL, MOVEMENT, FILTERED)
 
 
 def sample(totals, movements, filtered=None, months=None, region="테스트지역", age="20대"):
@@ -105,6 +106,54 @@ class RiskModelTests(unittest.TestCase):
         self.assertEqual(row["원본_전체결제건수"], 100)
         self.assertEqual(row[FILTERED], 70)
         self.assertEqual(row["골프_결제건수"] + row["레저타운놀이동산_결제건수"] + row[FILTERED], row["원본_전체결제건수"])
+
+
+class RiskSensitivityTests(unittest.TestCase):
+    def test_constant_daily_consumption_does_not_decline_with_shorter_month(self):
+        data = sample([3100, 3100, 3000], [np.nan, -.04, -.04], [310, 310, 300])
+        monthly = classify_risk(data)
+        daily = classify_risk(data, consumption_basis="daily")
+        self.assertAlmostEqual(monthly.iloc[-1]["소비변화율"], 30/31 - 1)
+        self.assertAlmostEqual(daily.iloc[-1]["소비변화율"], 0)
+        self.assertAlmostEqual(daily.iloc[-1]["업종제외소비변화율"], 0)
+        self.assertEqual(monthly.iloc[-1]["위험단계"], 3)
+        self.assertEqual(daily.iloc[-1]["위험단계"], 2)
+        pd.testing.assert_series_equal(monthly["이동변화율"], daily["이동변화율"])
+        pd.testing.assert_series_equal(monthly[TOTAL], daily[TOTAL])
+
+    def test_real_daily_drop_is_retained_and_leap_february_uses_29_days(self):
+        row = classify_risk(sample([3100, 3100, 2940], [np.nan, -.04, -.04], [310, 310, 294]),
+                            consumption_basis="daily").iloc[-1]
+        self.assertAlmostEqual(row["소비변화율"], -.02)
+        self.assertAlmostEqual(row["업종제외소비변화율"], -.02)
+        leap = classify_risk(sample([3100, 2900], [np.nan, -.04], months=["202401", "202402"]),
+                             consumption_basis="daily")
+        self.assertAlmostEqual(leap.iloc[-1]["소비변화율"], 0)
+
+    def test_unknown_levels_are_not_counted_as_changes(self):
+        result = classify_risk(sample([10000, 9600, 9216], [np.nan, -.04, -.04]))
+        compared = compare_scenarios(result, result)
+        self.assertEqual(compared["양쪽단계있음"].sum(), 2)
+        self.assertEqual(compared["양쪽판정완료"].sum(), 1)
+        self.assertEqual(compared["단계변경"].sum(), 0)
+        self.assertEqual(compared["상태변경"].sum(), 0)
+
+    def test_severe_threshold_can_change_four_to_five(self):
+        data = sample([10000, 9600, 9216], [np.nan, -.04, -.04])
+        self.assertEqual(classify_risk(data, .03, .05).iloc[-1]["위험단계"], 4)
+        self.assertEqual(classify_risk(data, .03, .04).iloc[-1]["위험단계"], 5)
+
+    def test_eighteen_scenarios_preserve_inputs_and_separate_the_two_effects(self):
+        data = sample([3100, 3100, 3000], [np.nan, -.04, -.04], [310, 310, 300])
+        original = data.copy(deep=True)
+        comparisons, details, baseline = analyze_sensitivity(data)
+        self.assertEqual(len(comparisons), 18)
+        self.assertEqual(len(details), 54)
+        pd.testing.assert_frame_equal(data, original)
+        pd.testing.assert_frame_equal(baseline, classify_risk(data))
+        daily = comparisons.loc[comparisons["시나리오"].eq("daily_d03_s05")].iloc[0]
+        self.assertEqual(daily["같은소비기준3_5대비단계변경수"], 0)
+        self.assertEqual(daily["월합계3_5대비단계변경수"], 1)
 
 
 if __name__ == "__main__":
