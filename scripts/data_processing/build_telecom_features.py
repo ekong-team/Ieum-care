@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from data_contract import AGES, MONTHS, require_columns, require_keys, require_numbers
+from data_contract import AGES, MONTHS, require_columns, require_keys, require_numbers, safe_ratio as ratio
 
 REPO = Path(__file__).resolve().parents[2]
 RAW_DIR = REPO / "data" / "raw"
@@ -36,10 +36,6 @@ def load_files(kind, metrics):
         print(f"{file.name}: {before:,}행 → {len(df):,}행 (완전 중복 {before-len(df):,}행 제거)")
         tables.append(df[KEY_COLS + metrics])
     return pd.concat(tables, ignore_index=True)
-
-
-def ratio(numerator, denominator):
-    return numerator / denominator.where(denominator > 0)
 
 
 def normalized_entropy(df, columns):

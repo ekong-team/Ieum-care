@@ -1,5 +1,7 @@
 """공모전 제공 데이터의 공통 입력 계약. 다른 기간을 쓰면 이 설정부터 변경한다."""
 
+import hashlib
+
 import numpy as np
 import pandas as pd
 
@@ -7,6 +9,20 @@ MONTHS = [f"2025{month:02d}" for month in range(7, 13)]
 REGIONS = {"11230": "서울 강남구", "32010": "강원 춘천시"}
 AGES = {"10G": "10대", "20G": "20대", "30G": "30대",
         "40G": "40대", "50G": "50대", "60GU": "60대이상"}
+
+
+def file_hash(path):
+    """큰 원본도 메모리에 전부 올리지 않고 변경 여부를 기록한다."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def safe_ratio(numerator, denominator):
+    """분모가 0이거나 결측이면 계산 불가를 유지한다."""
+    return numerator / denominator.where(denominator > 0)
 
 
 def require_columns(df, columns, name):

@@ -1,73 +1,47 @@
 # Ieum care
 
+사회적 고립 예방 및 대응 공모전 프로젝트. 현재 데이터 정제·특징 분석·입력 후보 검토까지 구현했고,
+위험 점수·5단계 분류·복지 에이전트는 개발 전이다.
+
 ## 폴더 구조
 
 ```text
 Ieum-care/
-├─ frontend/
-├─ backend/
 ├─ ai/
-│  ├─ risk_model/
-│  ├─ welfare_agent/
-│  └─ evaluation/
+│  ├─ risk_model/                 # 위험도 개발 예정
+│  ├─ welfare_agent/              # 복지 추천·프로그램 기획 예정
+│  └─ evaluation/                 # 프로그램 평가·예산 분석 예정
+├─ backend/                       # API 개발 예정
+├─ frontend/                      # 화면 개발 예정
 ├─ data/
-│  ├─ raw/
-│  ├─ processed/
-│  │  ├─ telecom_features.csv
-│  │  ├─ card_features.csv
-│  │  └─ risk_features.csv
-│  └─ external/
-├─ scripts/
-│  └─ data_processing/
-│     ├─ build_telecom_features.py
-│     ├─ build_card_features.py
-│     ├─ industry_classification.py
-│     ├─ data_contract.py
-│     ├─ build_risk_features.py
-│     ├─ analyze_risk_features.py
-│     ├─ audit_region_mapping.py
-│     ├─ validate_region_boundaries.py
-│     ├─ analyze_spatial_sensitivity.py
-│     ├─ analyze_industry_sensitivity.py
-│     ├─ audit_model_inputs.py
-│     ├─ validate_processed.py
-│     └─ run_preprocessing.py
+│  ├─ raw/                        # 통신·카드 원본과 정의서 (Git 제외)
+│  ├─ processed/                  # 특징 CSV·분석표·검증 기록 (Git 제외)
+│  └─ external/sgis/              # 경계 ZIP (Git 제외)·출처 README
+├─ scripts/data_processing/
+│  ├─ run_preprocessing.py        # 전체 실행 시작점
+│  ├─ build_telecom_features.py   # 통신 정제
+│  ├─ build_card_features.py      # 카드 정제
+│  ├─ build_risk_features.py      # 월×지역×연령 특징 결합
+│  ├─ analyze_features.py         # EDA·업종 민감도·입력 검토
+│  ├─ validate_regions.py         # 코드·좌표·경계·공간 민감도
+│  ├─ validate_processed.py       # 최종 데이터 검증·실행 기록
+│  ├─ data_contract.py            # 공통 검증·계산·해시
+│  └─ industry_classification.py  # 업종 분류 정의
 ├─ docs/
+│  ├─ data_preprocessing.md       # 정제 기준·재현 방법
+│  ├─ data_analysis.md            # 업종 기준·민감도·입력 후보
+│  └─ spatial_validation.md       # 지역 검증 방법·예외
 ├─ tests/
-├─ requirements.txt
-├─ requirements-spatial.txt
+│  ├─ test_preprocessing.py       # 정제·업종·입력 검토 검사
+│  └─ test_spatial_validation.py  # 경계 판정 검사
+├─ requirements.txt               # 설치 패키지 목록 하나로 관리
 ├─ .gitignore
 └─ README.md
 ```
 
-`processed`의 세 CSV 이름은 최종 산출물 구조를 나타내며, 실제 생성 여부는 처리 단계에 따라 다릅니다.
-원본과 처리 결과 데이터는 Git에 업로드하지 않고 로컬에 보관합니다.
-카드 스크립트는 `card_features.csv`와 업종 검토용 `industry_classification_review.csv`를 생성합니다. 특징의 한 행은 월×가맹점 지역×연령이며,
-카드1 전체 금액·건수, 업종그룹별 금액·건수, 카드2 전체 금액·건수를 출처별 열로 보존합니다.
-카드1·2 수치를 서로 더하지 않습니다. 고객 거주지는 카드2 합계에서 모두 포함하며,
-이 표는 거주민만의 소비를 나타내지 않습니다. 업종그룹에 기록이 없는 경우의 0은
-제공 데이터의 관측 기록 기준입니다. 업종 분류 v2는 활동 목적별 분류안이며 위험도 검증을 의미하지 않습니다.
-분류 정의는 `industry_classification.py`, 업종별 배정과 주의사항은 [업종 분류 문서](docs/industry_classification.md)에 있습니다.
-알려진 포괄 업종은 `해석보류`, 분류표에 없는 새 업종은 `미분류`로 유지합니다.
-기존 중간 CSV 4개는 로컬에 보존하지만 새 실행에서는 다시 생성하지 않습니다.
-`risk_features.csv`는 통신을 지역별로 요약한 뒤 카드와 월×지역×연령 단위로 결합한 특징 표입니다.
-사회활동 관련 후보 업종의 건수·비중·전월 변화도 포함하며, 실제 교류나 고립 정답을 나타내지 않습니다.
-위험 점수와 5단계 분류는 아직 구현 전입니다.
-카드·통신 데이터와 테이블 정의서 ZIP은 로컬의 `data/raw/`에 압축 해제합니다.
-카드 TXT와 통신 `flow_*.csv` 파일은 `data/raw/` 바로 아래에 놓습니다.
-카드 스크립트는 이 경로에서 원본을 읽고 `data/processed/`에 결과를 저장합니다.
+## 설치와 실행
 
-업종 분류 변경 후 아래 순서로 특징과 EDA를 다시 생성합니다. 통신 원본/전처리 변경 시에는 통신 스크립트부터 실행합니다.
-
-```bash
-python scripts/data_processing/build_card_features.py
-python scripts/data_processing/build_risk_features.py
-python scripts/data_processing/analyze_risk_features.py
-```
-
-EDA 보고서와 분석표는 `data/processed/eda/`에 저장되며 Git에서 제외됩니다.
-
-전체 정제·EDA·최종 검증은 Python 3.12 환경에서 다음과 같이 실행합니다.
+Python 3.12 권장(최소 3.11). 프로젝트 최상위 폴더에서 실행한다.
 
 ```bash
 python -m pip install -r requirements.txt
@@ -75,24 +49,39 @@ python scripts/data_processing/run_preprocessing.py
 python -m unittest discover -s tests -v
 ```
 
-실행 환경, 결측·중복 처리, 단위, 지역 매핑의 검증 범위는 [정제 기준과 재현 방법](docs/data_preprocessing.md)에 있습니다.
-`preprocessing_manifest.json`에는 입력·코드·주요 결과 해시와 환경 버전이 기록됩니다.
-2025년 2분기 SGIS 경계로 조건부 공간 대조를 수행했고 대상 좌표 2개 예외를 기록했습니다.
-원본 좌표계·좌표 의미 및 보류 업종 상세 정의는 제공기관 확인 사항으로 남아 있습니다.
-공간 검증은 [지역 매핑 검증](docs/spatial_validation.md), 업종 처리 기준과 민감도는
-[업종 검증 기록](docs/industry_validation.md), 특징별 목적·결측·관측 범위는
-[모델 입력 검토](docs/model_input_review.md)에 정리했습니다.
-
-정제 후 아래 분석을 실행하면 기존 특징을 유지하면서 검토표를 생성합니다.
+기본 실행: 통신 정제 → 카드 정제 → 특징 결합 → EDA·업종 민감도·입력 검토 → 최종 검증.
+통신 CSV 18개와 카드 TXT 2개가 `data/raw/` 바로 아래에 있어야 한다.
+`data/external/sgis/bnd_sigungu_00_2025_2Q.zip`이 있다면 지역 검증까지 함께 실행한다.
 
 ```bash
-python scripts/data_processing/analyze_industry_sensitivity.py
-python scripts/data_processing/audit_model_inputs.py
-python scripts/data_processing/validate_processed.py
+python scripts/data_processing/run_preprocessing.py --with-spatial
 ```
 
-공간 검증에는 별도로 `requirements-spatial.txt` 설치와 SGIS 경계 원본이 필요합니다.
-입력 검토 후보 3개는 탐색용이며, 위험 점수·5단계·정확도는 아직 구현·검증 전입니다.
+분석만 다시 하려면 아래 명령을 사용한다. `--only` 없이 실행하면 해당 파일의 모든 단계를 실행한다.
+
+| 작업 | 명령 |
+| --- | --- |
+| 특징 분석 전체 | `python scripts/data_processing/analyze_features.py` |
+| EDA만 | `python scripts/data_processing/analyze_features.py --only eda` |
+| 업종 민감도만 | `python scripts/data_processing/analyze_features.py --only industry` |
+| 입력 후보 검토만 | `python scripts/data_processing/analyze_features.py --only inputs` |
+| 지역 검증 전체 | `python scripts/data_processing/validate_regions.py` |
+| 최종 검증 기록 갱신 | `python scripts/data_processing/validate_processed.py` |
+
+## 데이터와 검증 범위
+
+- `telecom_features.csv`: 월×소지역코드×좌표의 통신 특징.
+- `card_features.csv`: 월×가맹점 지역×연령의 출처별 카드 특징.
+- `risk_features.csv`: 통신+카드 결합 특징. 현재 6개월×2지역×6연령 = 72행·92열.
+- `preprocessing_manifest.json`: 데이터 계약 검증 상태, 분석 기록 최신 여부, 환경과 파일 해시.
+
+카드1·2 합계는 서로 더하지 않는다. 통신은 고유 방문자 수가 아니고, 카드는 거주민만의 소비가 아니다.
+사회활동 후보 업종의 결제는 실제 교류를 직접 측정하지 않는다.
+공간 대조는 UTM-K를 EPSG:5179로 해석한 조건부 결과이며 대상 좌표 2개 예외를 기록했다.
+원본 좌표 기준·대표점 의미와 해석보류 업종의 상세 정의는 제공기관 확인 사항으로 남아 있다.
+원본·생성 결과·가상환경은 Git에 올리지 않는다.
+
+[정제 기준](docs/data_preprocessing.md) · [특징 분석과 입력 검토](docs/data_analysis.md) · [지역 경계 검증](docs/spatial_validation.md)
 
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발

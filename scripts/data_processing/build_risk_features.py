@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from industry_classification import RULES
-from data_contract import AGES, REGIONS, require_months
+from data_contract import AGES, REGIONS, require_months, safe_ratio
 
 
 # 1. 경로와 결합 기준
@@ -28,11 +28,6 @@ LOCATION = ["BLOCK_CD", "X_COORD", "Y_COORD"]
 # 주변 지역 코드를 강남/춘천으로 강제 변환하지 않는다.
 TIME_COLS = ["TIME_FLOW_TOTAL", "FLOW_DAWN", "FLOW_DAYTIME", "FLOW_EVENING"]
 WEEK_COLS = ["WEEKDAY_AVG", "WEEKEND_AVG", "WEEK_AVG"]
-
-
-def safe_ratio(numerator, denominator):
-    """분모가 0이거나 결측이면 비율을 계산하지 않는다."""
-    return numerator / denominator.where(denominator > 0)
 
 
 def check_unique(df, keys, name):

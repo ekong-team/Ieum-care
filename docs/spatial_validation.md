@@ -3,8 +3,8 @@
 ## 현재 상태
 
 코드·좌표 형식 점검과 실제 행정경계 대조는 별도 단계다.
-`audit_region_mapping.py`는 전자를 수행하며 경계 대조 여부는 판단하지 않는다.
-실제 대조는 `validate_region_boundaries.py`의 별도 결과를 확인한다.
+`validate_regions.py --only coords`는 전자를 수행하며 경계 대조 여부는 판단하지 않는다.
+실제 대조는 `validate_regions.py --only boundary`의 별도 결과를 확인한다.
 기존 지역 매핑이나 특징 값은 변경하지 않는다.
 
 2026-10-11 점검에서 통신 특징 721,318행, 고유 코드·좌표 조합 126,405개를 확인했다.
@@ -15,7 +15,7 @@
 작은 비중이라는 이유만으로 지역 매핑이 검증됐다고 판단하지 않는다.
 
 ```powershell
-python scripts/data_processing/audit_region_mapping.py
+python scripts/data_processing/validate_regions.py --only coords
 ```
 
 결과는 Git에서 제외된 `data/processed/`에 생성된다.
@@ -44,13 +44,14 @@ SHP와 같은 이름의 SHX·DBF·PRJ 파일을 함께 유지한다.
 ## 경계 대조 실행
 
 ```powershell
-.venv\Scripts\python.exe -m pip install -r requirements-spatial.txt
-.venv\Scripts\python.exe scripts/data_processing/validate_region_boundaries.py
-.venv\Scripts\python.exe scripts/data_processing/analyze_spatial_sensitivity.py
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe scripts/data_processing/validate_regions.py
 .venv\Scripts\python.exe scripts/data_processing/validate_processed.py
 ```
 
 ZIP 내부 기준일은 20250630, PRJ는 EPSG:5179이며 252개 시군구 경계를 포함한다.
+`validate_regions.py` 하나가 코드·좌표 점검 → 경계 대조 → 공간 민감도를 순서대로 실행한다.
+특정 단계만 다시 실행할 때 `--only coords`, `--only boundary`, `--only sensitivity`를 사용할 수 있다.
 통신 좌표는 제공 정의서의 UTM-K를 EPSG:5179로 해석한다. 전체 CRS의 기관 확인과
 좌표 대표점 의미는 별도 미확정 사항이므로 조건부 공간 대조로 표현한다.
 
