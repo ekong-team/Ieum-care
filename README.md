@@ -1,14 +1,16 @@
 # Ieum care
 
-사회적 고립 예방 및 대응 공모전 프로젝트. 현재 데이터 정제·특징 분석·입력 후보 검토까지 구현했고,
-위험 점수·5단계 분류·복지 에이전트는 개발 전이다.
+사회적 고립 예방 및 대응 공모전 프로젝트. 데이터 정제·특징 분석·입력 검토와
+팀 규칙 기반 활동 감소 신호 5단계 분류 v1을 구현했다. 개인 고립 예측이나 확률 모델은 아니다.
+복지 에이전트와 별도 위험 점수는 개발 전이다.
 
 ## 폴더 구조
 
 ```text
 Ieum-care/
 ├─ ai/
-│  ├─ risk_model/                 # 위험도 개발 예정
+│  ├─ risk_model/
+│  │  └─ classify_risk.py          # 활동 감소 5단계 판정·업종 제외 점검·근거 기록
 │  ├─ welfare_agent/              # 복지 추천·프로그램 기획 예정
 │  └─ evaluation/                 # 프로그램 평가·예산 분석 예정
 ├─ backend/                       # API 개발 예정
@@ -30,10 +32,12 @@ Ieum-care/
 ├─ docs/
 │  ├─ data_preprocessing.md       # 정제 기준·재현 방법
 │  ├─ data_analysis.md            # 업종 기준·민감도·입력 후보
-│  └─ spatial_validation.md       # 지역 검증 방법·예외
+│  ├─ spatial_validation.md       # 지역 검증 방법·예외
+│  └─ risk_model_design.md        # 팀 합의 5단계 규칙·판정 상태·실행 결과
 ├─ tests/
 │  ├─ test_preprocessing.py       # 정제·업종·입력 검토 검사
-│  └─ test_spatial_validation.py  # 경계 판정 검사
+│  ├─ test_spatial_validation.py  # 경계 판정 검사
+│  └─ test_risk_model.py          # 5단계·연속성·업종 제외·보류 검사
 ├─ requirements.txt               # 설치 패키지 목록 하나로 관리
 ├─ .gitignore
 └─ README.md
@@ -82,6 +86,21 @@ python scripts/data_processing/run_preprocessing.py --with-spatial
 원본·생성 결과·가상환경은 Git에 올리지 않는다.
 
 [정제 기준](docs/data_preprocessing.md) · [특징 분석과 입력 검토](docs/data_analysis.md) · [지역 경계 검증](docs/spatial_validation.md)
+
+## 팀 규칙 기반 5단계 분류
+
+정제와 입력 검증이 끝나고 카드1 원본이 있는 환경에서 실행한다.
+
+```bash
+python ai/risk_model/classify_risk.py
+```
+
+소비는 카드1 전체 개인 결제건수, 이동은 공통 위치의 연령 유동량 변화다.
+3% 동시 감소·연속 두 번의 비교·현재 5% 감소·골프/레저타운놀이동산 제외 후 감소를 확인한다.
+결과는 `data/processed/risk_model/risk_levels.csv`와 `summary.json`에 생성된다.
+단계와 함께 판정완료/부분판정/판단보류 상태를 확인한다. 부분판정 단계는 확인된 하한이다.
+7월을 1단계로 대체하지 않으며 원본과 기존 특징은 유지한다.
+규칙과 실제 분포·제한 사항은 [위험 신호 설계](docs/risk_model_design.md)에 있다.
 
 ## 주제
 사회적 고립 예방 및 대응을 위한 AI Agent 개발
