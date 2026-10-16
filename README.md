@@ -9,10 +9,10 @@
 Ieum-care/
 ├─ ai/
 │  ├─ risk_model/                 # 위험도 개발 예정
-│  ├─ welfare_agent/              # 복지 추천·프로그램 기획 예정
+│  ├─ welfare_agent/              # 공식 복지자원 후보 조회·입력 검증
 │  └─ evaluation/                 # 프로그램 평가·예산 분석 예정
-├─ backend/                       # API 개발 예정
-├─ frontend/                      # 화면 개발 예정
+├─ backend/                       # 로컬 화면·복지자원 조회 API
+├─ frontend/                      # 공통 메뉴·복지자원 추천 화면 초안
 ├─ data/
 │  ├─ raw/                        # 통신·카드 원본과 정의서 (Git 제외)
 │  ├─ processed/                  # 특징 CSV·분석표·검증 기록 (Git 제외)
@@ -40,6 +40,18 @@ Ieum-care/
 ```
 
 ## 설치와 실행
+
+### 프론트엔드 미리보기
+
+```bash
+python backend/server.py
+```
+
+<http://127.0.0.1:5175> 접속 후 **복지자원 추천** 메뉴를 선택한다.
+화면은 로컬 추천 API에 연결되어 공식 안내 자원 후보를 조회한다. 현재 모집·개인 자격은 확인이 필요하며 위험도 분석·LLM·기획 Agent는 연결 전이다.
+파일 구성과 화면 범위는 [프론트엔드 안내](frontend/README.md)를 참고한다.
+
+### 데이터 정제
 
 Python 3.12 권장(최소 3.11). 프로젝트 최상위 폴더에서 실행한다.
 
