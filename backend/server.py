@@ -7,13 +7,23 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import sys
+from threading import BoundedSemaphore
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from ai.welfare_agent.recommender import recommend, validate_request  # noqa: E402
+from ai.welfare_agent.live_agent import recommend_live, config_status, AgentError  # noqa: E402
+
+LIVE_SLOT = BoundedSemaphore(1)
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/api/welfare/status":
+            self.send_json(HTTPStatus.OK, config_status())
+            return
+        super().do_GET()
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
@@ -39,13 +49,31 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "본문은 1~16384바이트여야 합니다."})
                 return
             payload = json.loads(self.rfile.read(length))
+            if not isinstance(payload, dict):
+                raise ValueError("요청 객체가 필요합니다.")
+            mode = payload.pop("mode", "live")
+            if mode not in ("live", "offline"):
+                raise ValueError("지원하지 않는 실행 모드입니다.")
             # 서버 내부 오류와 사용자 입력 오류를 구분한다.
             validate_request(payload)
         except (ValueError, UnicodeError):
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": "요청 형식 또는 값이 올바르지 않습니다."})
             return
         try:
-            result = recommend(payload)
+            if mode == "live":
+                if not LIVE_SLOT.acquire(blocking=False):
+                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "다른 AI 추천 요청이 처리 중입니다. 잠시 후 다시 시도해주세요."})
+                    return
+                try:
+                    result = recommend_live(payload)
+                finally:
+                    LIVE_SLOT.release()
+            else:
+                result = {**recommend(payload), "schema_version": "welfare-0.4", "mode": "offline"}
+                result["warnings"].insert(0, "저장된 자료의 조회 테스트입니다. 외부 검색·LLM을 실행하지 않았습니다.")
+        except AgentError as error:
+            self.send_json(error.status, {"error": str(error)})
+            return
         except Exception:
             self.log_error("복지자원 후보 처리 중 오류가 발생했습니다.")
             self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "추천 처리에 실패했습니다. 서버 상태를 확인해주세요."})
