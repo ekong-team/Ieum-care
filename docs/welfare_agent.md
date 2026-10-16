@@ -49,9 +49,9 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 
 카드는 추천 이유·고립 예방과의 연결·신청 전 확인을 나눠 표시한다. 위험도 입력이 없으면 지역·연령·목적 기반 추천이라는 안내를 서버가 고정 제공한다. 프롬프트에서 코드 용어 사용을 막고 표시용 설명에 남은 null/risk_assessment 표기도 읽기 쉬운 말로 치환한다.
 
-실시간 출처의 checked_at은 **검색일**로 표시한다. 저장 자료 모드에서는 **출처 확인일**이며 새로운 검색을 했다는 뜻이 아니다. 자료 기준 연도는 별도 `source.reference_year`로 표시하고, 미확인은 최신 자료라고 추정하지 않는다. LLM이 제시한 연도와 240자 이내의 근거 구절이 해당 URL의 실제 검색 제목/내용에 있는지 대조한다. 근거가 없거나 다른 URL에만 있으면 연도와 인용문을 버리고 unknown으로 남긴다. 연도 구절의 의미까지 독립 검증한 것은 아니므로 상세 화면에 원문 인용과 한계를 함께 표시한다.
+실시간 출처의 checked_at은 **검색일**로 표시한다. 저장 자료 모드에서는 **출처 확인일**이며 새로운 검색을 했다는 뜻이 아니다. 자료 연도는 별도 `source.reference_year`로 표시하고, 미확인은 최신 자료라고 추정하지 않는다. LLM이 제시한 연도와 240자 이내의 근거 구절이 해당 URL의 실제 검색 제목/내용에 있는지 대조한다. 근거가 없거나 다른 URL에만 있으면 연도와 인용문을 버리고 unknown으로 남긴다. 연도 구절의 의미까지 독립 검증한 것은 아니므로 상세 화면에 원문 인용과 한계를 함께 표시한다.
 
-`source.reference_year_status`는 past_year/current_year/future_year/unknown이며 현재 연도라도 모집·자격이 검증됐다는 뜻이 아니다. 과거 연도는 현행 기준 재확인, 미래 연도는 적용 시점 확인으로 표시한다. page_updated_at은 여전히 별도 정보로 유지한다. 신규 필드는 선택 목록 JSON에도 보존되며 기존 HTTP schema_version(welfare-0.4)은 유지한다.
+`source.reference_year_kind`는 applicable(적용 기준)/publication(발행·게시)/unknown이며 발행 연도가 현행 자격 기준을 뜻하지 않도록 구분한다. `source.reference_year_status`는 past_year/current_year/future_year/unknown이며 현재 연도라도 모집·자격이 검증됐다는 뜻이 아니다. 과거 연도는 현행 기준 재확인, 미래 연도는 적용 시점 확인으로 표시한다. page_updated_at은 여전히 별도 정보로 유지한다. 신규 필드는 선택 목록 JSON에도 보존되며 기존 HTTP schema_version(welfare-0.4)은 유지한다.
 
 ## 실행과 파일
 
@@ -94,7 +94,7 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 - `is_demo`: false는 **자원 목록이 실제 공식 안내 기반**이라는 뜻이다. `has_example_context`가 true이면 위험도 맥락은 가상 입력이다. 둘은 구분해야 한다.
 - live의 `recommendation_method`: tavily_search_gemini_judgment_v1, catalog_version은 null. model·search_provider·searched_at·search_query·search_credits·search_sources·excluded_count를 함께 반환한다. search_credits는 신규 검색 시 제공자 보고값이며 미제공 시 null이다. 캐시 재사용 시 search_cache_hit=true와 search_credits=0을 반환한다. offline에서는 기존 목록 버전과 필터 방식을 표시한다.
 - `target`, `risk_assessment`: 조회 집단과 전달받은 위험도 결과. 위험 단계를 재계산하지 않는다.
-- live의 review는 LLM 요약(summary)·추가 질문을 포함하며 rules_version은 llm-grounding-0.2다. input_note는 위험도 입력 유무에 따른 서버의 안내이며 LLM의 판단 요약과 구분한다. offline은 support-review-0.2 규칙을 사용한다.
+- live의 review는 LLM 요약(summary)·추가 질문을 포함하며 rules_version은 llm-grounding-0.3다. input_note는 위험도 입력 유무에 따른 서버의 안내이며 LLM의 판단 요약과 구분한다. offline은 support-review-0.2 규칙을 사용한다.
 - `resources`, `total`: 결과 목록과 개수. 일치가 없어도 정상 200, 빈 배열을 반환한다.
 - `coverage`: candidates_found 또는 (live) no_grounded_candidates/(offline) no_candidates_in_catalog와 해석 설명. 후보가 없더라도 서비스 부재·지원 불필요 판정으로 해석하지 않는다.
 - 각 자원: 식별자·지역·설명·지원 목적·조건·운영 방식·일치 근거(`match_reasons`)·확인 사항.
@@ -222,3 +222,5 @@ Gemini 2.5 Flash·Flash-Lite는 신규 프로젝트에서 제공 중단(404)이 
 공개 조건(춘천시·60대 이상)으로 1회 호출했다. Tavily에서 공식 출처와 검색 내용을 확보해 Gemini 판단 단계까지 진행했으나 Gemini가 HTTP 503을 반환했다. 자동 재시도는 하지 않았다. 이후 사용자가 실제 추천 후보 3개가 표시된 화면을 확인했다. 이번 분류·설명·연도 표시 변경은 가짜 응답 테스트로 검증했으며 변경 후 실호출 추천 품질 검토는 별도로 진행한다.
 
 2026-10-17 연결 점검: Tavily 호출 없이 Gemini에 짧은 확인 요청을 1회 보내 HTTP 200/STOP을 받았다. 이는 키·모델의 현재 응답 확인이며 전체 추천 요청의 성공·안정성 보장은 아니다. 503 시 검색 캐시 재사용과 대기 후 수동 재시도는 가짜 응답으로 검증했다.
+
+실제 조회의 초기 검증 결과와 미해결 항목은 [복지 추천 검증 기록](welfare_agent_validation.md)을 참고한다. 후보 제외 사유는 exclusion_counts에 출처·지역·연령·지원 목적·종료·중복별 건수로 기록한다. 추적용 tms.bokjiro.go.kr 링크는 서비스 원문으로 사용하지 않는다.

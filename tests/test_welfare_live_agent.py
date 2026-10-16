@@ -24,7 +24,7 @@ def example_decision():
         "source_url": URL, "source_title": "가상 검색 출처", "reason": "입력 분석과의 관련성을 검토하는 예시",
         "check": "본인 의사·자격·운영 여부 확인", "availability_status": "needs_confirmation",
         "isolation_relevance": "direct", "relevance_reason": "교류 활동이 있는 가상 자료에 근거한 분류입니다.",
-        "reference_year": None, "reference_year_evidence": None,
+        "reference_year": None, "reference_year_kind": "unknown", "reference_year_evidence": None,
     }]}
 
 
@@ -105,7 +105,7 @@ class LiveAgentTests(unittest.TestCase):
 
     def test_reference_year_requires_matching_quote_from_same_source(self):
         decision = example_decision()
-        decision['resources'][0].update(reference_year=2025, reference_year_evidence='2025년 기준 지원 안내')
+        decision['resources'][0].update(reference_year=2025, reference_year_kind='applicable', reference_year_evidence='2025년 기준 지원 안내')
         search = {'results': [{'url': URL, 'title': '2025년 기준 지원 안내', 'content': '대상자 안내'}]}
         result, _ = self.run_agent(decision, search)
         source = result['resources'][0]['source']
@@ -126,10 +126,34 @@ class LiveAgentTests(unittest.TestCase):
 
     def test_other_sources_year_cannot_be_assigned_to_resource(self):
         decision = example_decision()
-        decision['resources'][0].update(reference_year=2025, reference_year_evidence='2025년 기준 지원 안내')
+        decision['resources'][0].update(reference_year=2025, reference_year_kind='applicable', reference_year_evidence='2025년 기준 지원 안내')
         search = {'results': [{'url': URL, 'content': '연도 미명시 자료'},
                               {'url': 'https://www.chuncheon.go.kr/another', 'content': '2025년 기준 지원 안내'}]}
         self.assertIsNone(self.run_agent(decision, search)[0]['resources'][0]['source']['reference_year'])
+
+    def test_publication_year_is_preserved_separately_from_applicability(self):
+        decision = example_decision()
+        decision['resources'][0].update(reference_year=2026, reference_year_kind='publication',
+                                        reference_year_evidence='2026년 5월 소식지')
+        search = {'results': [{'url': URL, 'title': '2026년 5월 소식지', 'content': '교류 활동 안내'}]}
+        source = self.run_agent(decision, search)[0]['resources'][0]['source']
+        self.assertEqual(source['reference_year'], 2026)
+        self.assertEqual(source['reference_year_kind'], 'publication')
+        decision['resources'][0]['reference_year_kind'] = 'unknown'
+        self.assertIsNone(self.run_agent(decision, search)[0]['resources'][0]['source']['reference_year'])
+
+    def test_exclusion_counts_explain_filtered_candidates_without_repeating_claims(self):
+        decision = example_decision()
+        original = copy.deepcopy(decision['resources'][0])
+        decision['resources'] = [{**original, 'region': '강남구'},
+                                 {**original, 'age_ranges': [{'min': 20, 'max': 39}]},
+                                 {**original, 'availability_status': 'closed'},
+                                 {**original, 'source_url': 'https://www.chuncheon.go.kr/not-in-search'}]
+        result, _ = self.run_agent(decision)
+        self.assertEqual(result['total'], 0)
+        self.assertEqual(result['exclusion_counts'], {'region_mismatch': 1, 'age_mismatch': 1,
+                                                     'closed': 1, 'source_not_grounded': 1})
+        self.assertEqual(sum(result['exclusion_counts'].values()), result['excluded_count'])
 
     def test_ungrounded_or_unofficial_sources_are_excluded(self):
         for url in ('https://www.chuncheon.go.kr/not-in-search', 'https://example.com/fake', 'javascript:alert(1)'):
@@ -314,7 +338,8 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual(len(evidence[0]['content']), 6000)
 
     def test_official_domain_matching_is_not_a_substring_check(self):
-        for url in ('https://chuncheon.go.kr.evil.com/a', 'https://evilchuncheon.go.kr/a', 'https://user@chuncheon.go.kr/a'):
+        for url in ('https://chuncheon.go.kr.evil.com/a', 'https://evilchuncheon.go.kr/a', 'https://user@chuncheon.go.kr/a',
+                    'https://tms.bokjiro.go.kr/TMS/tracking?URL=https://example.com'):
             self.assertIsNone(official_url(url))
         self.assertIsNotNone(official_url('https://www.chuncheon.go.kr/a'))
 

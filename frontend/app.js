@@ -21,11 +21,12 @@ function sourceInfo(item, detailed = false) {
   const live = recommendation?.mode === 'live';
   const year = source.reference_year;
   const yearLabel = year ? `${year}년` : '미확인';
-  const yearNote = source.reference_year_status === 'past_year' ? '과거 자료 · 현행 기준 재확인'
+  const yearKindLabel = source.reference_year_kind === 'publication' ? '자료 발행·게시 연도' : source.reference_year_kind === 'applicable' ? '적용 기준 연도' : '자료 연도(의미 미확인)';
+  const yearNote = source.reference_year_kind === 'publication' ? '발행·게시 연도만 확인 · 현행 적용 기준은 별도 확인' : source.reference_year_status === 'past_year' ? '과거 자료 · 현행 기준 재확인'
     : source.reference_year_status === 'future_year' ? '향후 기준 자료 · 적용 시점 확인'
     : year ? '현재 운영·모집 여부는 별도 확인' : '최신 자료인지 확인 필요';
   return `<div class="source-info"><a class="source-link" href="${escape(source.url)}" target="_blank" rel="noopener noreferrer">${escape(source.title)} ↗</a>
-    <div class="source-dates"><span>${live ? '검색일' : '출처 확인일'}: ${escape(source.checked_at)}</span><span>자료 기준 연도: ${escape(yearLabel)}</span>${recommendation?.search_cache_hit ? '<span>5분 이내 검색 결과 재사용 · 추가 검색 호출 없음</span>' : ''}</div>
+    <div class="source-dates"><span>${live ? '검색일' : '출처 확인일'}: ${escape(source.checked_at)}</span><span>${yearKindLabel}: ${escape(yearLabel)}</span>${recommendation?.search_cache_hit ? '<span>5분 이내 검색 결과 재사용 · 추가 검색 호출 없음</span>' : ''}</div>
     <p class="source-freshness ${source.reference_year_status === 'past_year' ? 'past-year' : ''}">${escape(yearNote)}</p>
     ${detailed ? `<p class="muted">${live ? '자료 연도는 검색 발췌문 대조 결과이며 원문 전체를 검증한 것은 아닙니다.' : '저장된 자료의 확인일이며 이번에 검색한 날짜가 아닙니다.'}<br>페이지 수정일: ${escape(source.page_updated_at || '미확인')}</p>${source.reference_year_evidence ? `<blockquote class="source-evidence">${escape(source.reference_year_evidence)}</blockquote>` : ''}<p class="muted">${escape(source.review_note)}</p>` : ''}</div>`;
 }
@@ -99,6 +100,7 @@ function renderReview() {
     ${risk ? `<p><strong>${risk.is_example ? '예시 위험도 입력 · 실제 분석 결과 아님' : '입력받은 위험도 결과 · 자동 수신 전'}</strong><br>${escape(risk.period)} · ${escape(risk.region)} · ${escape(ageLabel(risk.age_group))} · ${risk.level === null ? '단계 보류' : `${escape(risk.level)}단계`}<br>모델: ${escape(risk.model_version)}</p><ul>${risk.signals.map((signal) => `<li>${escape(signal.description)}</li>`).join('')}${risk.limitations.map((text) => `<li>관측 제한: ${escape(text)}</li>`).join('')}</ul>` : ''}
     ${review.confirmed_support_needs.length ? `<p>담당자가 확인한 필요: ${review.confirmed_support_needs.map((purpose) => escape(recommendation.purposes[purpose])).join(' · ')}</p>` : ''}
     ${review.suggested_purposes.map((item) => `<p><strong>확인해볼 목적: ${escape(recommendation.purposes[item.purpose])}</strong><br>${escape(item.reason)}</p>`).join('')}
+    ${recommendation.exclusion_counts && Object.keys(recommendation.exclusion_counts).length ? `<p class="muted">검토에서 제외된 후보: ${Object.entries(recommendation.exclusion_counts).map(([key, count]) => `${escape(({source_not_grounded:'검색 출처 미일치',region_mismatch:'지역 불일치',closed:'종료 확인',purpose_mismatch:'지원 목적 불일치',age_mismatch:'연령 불일치',duplicate:'중복'})[key] || '기타 사유')} ${escape(count)}개`).join(' · ')}</p>` : ''}
     <ul>${review.questions.map((text) => `<li>${escape(text)}</li>`).join('')}</ul>`;
 }
 
