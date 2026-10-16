@@ -14,6 +14,8 @@ PURPOSES = {
     "connection": "관계 형성·사회 참여",
     "daily": "일상생활 지원",
     "wellbeing": "정서·마음 돌봄",
+    "economic": "경제·생활 안정",
+    "other": "기타·통합 안내",
 }
 
 

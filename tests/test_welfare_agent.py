@@ -294,6 +294,13 @@ class WelfareApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(set(result), {"configured", "gemini_configured", "tavily_configured", "model", "provider", "search_provider"})
 
+    def test_http_temporary_failure_includes_manual_retry_delay(self):
+        payload = {"mode": "live", "target": {"region": "춘천시", "age_group": 60, "purpose": "all"}}
+        with patch('backend.server.recommend_live', side_effect=AgentError('Gemini 일시 중단', 503, 30)):
+            status, content = self.request("POST", "/api/welfare/recommendations", json.dumps(payload))
+        self.assertEqual(status, 503)
+        self.assertEqual(json.loads(content)['retry_after_seconds'], 30)
+
     def test_http_risk_and_confirmed_needs(self):
         payload = {"target": {"region": "춘천시", "age_group": 60, "purpose": "all"},
                    "risk_assessment": risk_example(), "confirmed_support_needs": ["connection"]}

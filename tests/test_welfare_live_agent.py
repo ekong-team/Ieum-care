@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch, Mock
 from urllib.error import HTTPError, URLError
 
-from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, config_status
+from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, config_status, SEARCH_CACHE, SEARCH_CACHE_LIMIT
 
 URL = 'https://www.chuncheon.go.kr/service-test'
 
@@ -23,11 +23,15 @@ def example_decision():
         "format": "문의 후 이용", "schedule": "미확인", "application_method": "공식 기관 문의",
         "source_url": URL, "source_title": "가상 검색 출처", "reason": "입력 분석과의 관련성을 검토하는 예시",
         "check": "본인 의사·자격·운영 여부 확인", "availability_status": "needs_confirmation",
+        "isolation_relevance": "direct", "relevance_reason": "교류 활동이 있는 가상 자료에 근거한 분류입니다.",
+        "reference_year": None, "reference_year_evidence": None,
     }]}
 
 
 class LiveAgentTests(unittest.TestCase):
     def setUp(self):
+        SEARCH_CACHE.clear()
+        self.addCleanup(SEARCH_CACHE.clear)
         self.payload = {"target": {"region": "춘천시", "age_group": 60, "purpose": "all"}, "risk_assessment": None}
         self.config = {"key": "fake-test-key", "model": "gemini-3.5-flash-lite", "search_key": "fake-search-key"}
         self.config_patch = patch('ai.welfare_agent.live_agent.configuration', return_value=self.config)
@@ -75,6 +79,57 @@ class LiveAgentTests(unittest.TestCase):
             recommend_live(self.payload, call=call)
         self.assertEqual(error.exception.status, 503)
         call.assert_not_called()
+
+    def test_economic_support_is_distinct_from_isolation_relevance(self):
+        decision = example_decision()
+        decision['resources'][0].update(purpose='economic', isolation_relevance='indirect',
+                                        relevance_reason='생활비 지원 후보이며 교류 활동은 근거에 없습니다.')
+        self.payload['target']['purpose'] = 'economic'
+        result, call = self.run_agent(decision)
+        self.assertEqual(result['resources'][0]['purpose'], 'economic')
+        self.assertEqual(result['resources'][0]['isolation_relevance'], 'indirect')
+        self.assertEqual(result['purposes']['economic'], '경제·생활 안정')
+        self.assertIn('economic', call.call_args.args[0]['generationConfig']['responseSchema']['properties']['resources']['items']['properties']['purpose']['enum'])
+        self.payload['target']['purpose'] = 'connection'
+        self.assertEqual(self.run_agent(decision)[0]['total'], 0)
+
+    def test_missing_risk_note_and_reader_friendly_text(self):
+        decision = example_decision()
+        decision['summary'] = 'risk_assessment가 null이면 지역과 연령만 참고합니다.'
+        decision['resources'][0]['reason'] = 'null인 분석 결과는 사용하지 않습니다.'
+        result, _ = self.run_agent(decision)
+        self.assertIn('위험도 분석 결과가 연결되지 않아', result['review']['input_note'])
+        self.assertNotIn('null', result['review']['summary'])
+        self.assertNotIn('risk_assessment', result['review']['summary'])
+        self.assertNotIn('null', result['resources'][0]['reason'])
+
+    def test_reference_year_requires_matching_quote_from_same_source(self):
+        decision = example_decision()
+        decision['resources'][0].update(reference_year=2025, reference_year_evidence='2025년 기준 지원 안내')
+        search = {'results': [{'url': URL, 'title': '2025년 기준 지원 안내', 'content': '대상자 안내'}]}
+        result, _ = self.run_agent(decision, search)
+        source = result['resources'][0]['source']
+        self.assertEqual(source['reference_year'], 2025)
+        self.assertEqual(source['reference_year_status'], 'past_year')
+        self.assertEqual(source['reference_year_evidence'], '2025년 기준 지원 안내')
+        self.assertNotEqual(source['checked_at'], '2025')
+        for changes in ({'reference_year_evidence': '실제 검색 내용에 없는 2025년 안내'},
+                        {'reference_year': 2026}, {'reference_year': None},
+                        {'reference_year': True}, {'reference_year_evidence': None}):
+            with self.subTest(changes=changes):
+                modified = copy.deepcopy(decision)
+                modified['resources'][0].update(changes)
+                source = self.run_agent(modified, search)[0]['resources'][0]['source']
+                self.assertIsNone(source['reference_year'])
+                self.assertIsNone(source['reference_year_evidence'])
+                self.assertEqual(source['reference_year_status'], 'unknown')
+
+    def test_other_sources_year_cannot_be_assigned_to_resource(self):
+        decision = example_decision()
+        decision['resources'][0].update(reference_year=2025, reference_year_evidence='2025년 기준 지원 안내')
+        search = {'results': [{'url': URL, 'content': '연도 미명시 자료'},
+                              {'url': 'https://www.chuncheon.go.kr/another', 'content': '2025년 기준 지원 안내'}]}
+        self.assertIsNone(self.run_agent(decision, search)[0]['resources'][0]['source']['reference_year'])
 
     def test_ungrounded_or_unofficial_sources_are_excluded(self):
         for url in ('https://www.chuncheon.go.kr/not-in-search', 'https://example.com/fake', 'javascript:alert(1)'):
@@ -172,6 +227,7 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual(error.exception.status, 503)
         self.assertIn('Gemini 서버', str(error.exception))
         self.assertIn('503', str(error.exception))
+        self.assertEqual(error.exception.retry_after_seconds, 30)
         self.assertEqual(send.call_count, 1)
 
     def test_non_free_search_model_is_rejected_without_call(self):
@@ -190,11 +246,51 @@ class LiveAgentTests(unittest.TestCase):
         self.assertIsNone(request.get_header('X-goog-api-key'))
         self.assertNotIn('fake-search-key', request.data.decode())
         for code in (402, 429, 432, 433):
+            SEARCH_CACHE.clear()
             with self.subTest(code=code), patch('ai.welfare_agent.live_agent.urlopen', side_effect=HTTPError('https://test', code, 'limit', {}, None)) as send:
                 with self.assertRaises(AgentError) as error:
                     tavily_search({'query': '춘천시'}, self.config)
                 self.assertEqual(error.exception.status, 429)
                 self.assertEqual(send.call_count, 1)
+
+    def test_search_is_reused_after_manual_gemini_retry(self):
+        with patch('ai.welfare_agent.live_agent.urlopen', return_value=io.BytesIO(json.dumps(self.search).encode())) as send:
+            failed_call = Mock(side_effect=AgentError('Gemini 일시 중단', 503, 30))
+            with self.assertRaises(AgentError):
+                recommend_live(self.payload, call=failed_call)
+            failed_call.assert_called_once()
+            call = Mock(return_value={'candidates': [message(json.dumps(example_decision()))]})
+            result = recommend_live(self.payload, call=call)
+        self.assertEqual(send.call_count, 1)
+        self.assertTrue(result['search_cache_hit'])
+        self.assertEqual(result['search_credits'], 0)
+        self.assertEqual(result['resources'][0]['source']['checked_at'], result['searched_at'])
+        call.assert_called_once()
+
+    def test_search_cache_expires_and_returns_independent_data(self):
+        with patch('ai.welfare_agent.live_agent.monotonic', return_value=100) as clock, patch('ai.welfare_agent.live_agent.urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(self.search).encode())) as send:
+            first = tavily_search({'query': '검색'}, self.config)
+            first['results'].clear()
+            clock.return_value = 200
+            second = tavily_search({'query': '검색'}, self.config)
+            self.assertEqual(len(second['results']), 1)
+            self.assertTrue(second['search_cache_hit'])
+            clock.return_value = 401
+            third = tavily_search({'query': '검색'}, self.config)
+        self.assertFalse(third['search_cache_hit'])
+        self.assertEqual(send.call_count, 2)
+
+    def test_search_cache_separates_queries_credentials_and_caps_entries(self):
+        with patch('ai.welfare_agent.live_agent.urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(self.search).encode())) as send:
+            tavily_search({'query': '검색'}, self.config)
+            tavily_search({'query': '다른 검색'}, self.config)
+            config = {**self.config, 'search_key': 'another-fake-key'}
+            tavily_search({'query': '검색'}, config)
+            self.assertEqual(send.call_count, 3)
+            for index in range(SEARCH_CACHE_LIMIT + 1):
+                tavily_search({'query': str(index)}, config)
+        self.assertLessEqual(len(SEARCH_CACHE), SEARCH_CACHE_LIMIT)
+        self.assertNotIn('fake-search-key', repr(list(SEARCH_CACHE)))
 
     def test_search_error_does_not_call_gemini(self):
         call = Mock()

@@ -72,7 +72,10 @@ class Handler(SimpleHTTPRequestHandler):
                 result = {**recommend(payload), "schema_version": "welfare-0.4", "mode": "offline"}
                 result["warnings"].insert(0, "저장된 자료의 조회 테스트입니다. 외부 검색·LLM을 실행하지 않았습니다.")
         except AgentError as error:
-            self.send_json(error.status, {"error": str(error)})
+            body = {"error": str(error)}
+            if error.retry_after_seconds is not None:
+                body["retry_after_seconds"] = error.retry_after_seconds
+            self.send_json(error.status, body)
             return
         except Exception:
             self.log_error("복지자원 후보 처리 중 오류가 발생했습니다.")

@@ -4,6 +4,8 @@ let recommendation = null;
 let loading = false;
 let errorMessage = '';
 let requestedMode = 'live';
+let retryAvailableAt = 0;
+let retryTimer = null;
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
 const $ = (selector) => document.querySelector(selector);
@@ -11,6 +13,36 @@ const pages = { dashboard: '대시보드', analysis: '분석', recommendations: 
 const selected = new Set();
 let filters = { region: '춘천시', age: 60, purpose: 'all' };
 const ageLabel = (age) => age === 60 ? '60대 이상' : age === 10 ? '20대 미만' : `${age}대`;
+
+const relevanceLabels = { direct: '고립 예방과 직접 연관', indirect: '일반 생활 지원 · 간접 연관', uncertain: '고립 예방 연관성 확인 필요' };
+
+function sourceInfo(item, detailed = false) {
+  const source = item.source;
+  const live = recommendation?.mode === 'live';
+  const year = source.reference_year;
+  const yearLabel = year ? `${year}년` : '미확인';
+  const yearNote = source.reference_year_status === 'past_year' ? '과거 자료 · 현행 기준 재확인'
+    : source.reference_year_status === 'future_year' ? '향후 기준 자료 · 적용 시점 확인'
+    : year ? '현재 운영·모집 여부는 별도 확인' : '최신 자료인지 확인 필요';
+  return `<div class="source-info"><a class="source-link" href="${escape(source.url)}" target="_blank" rel="noopener noreferrer">${escape(source.title)} ↗</a>
+    <div class="source-dates"><span>${live ? '검색일' : '출처 확인일'}: ${escape(source.checked_at)}</span><span>자료 기준 연도: ${escape(yearLabel)}</span>${recommendation?.search_cache_hit ? '<span>5분 이내 검색 결과 재사용 · 추가 검색 호출 없음</span>' : ''}</div>
+    <p class="source-freshness ${source.reference_year_status === 'past_year' ? 'past-year' : ''}">${escape(yearNote)}</p>
+    ${detailed ? `<p class="muted">${live ? '자료 연도는 검색 발췌문 대조 결과이며 원문 전체를 검증한 것은 아닙니다.' : '저장된 자료의 확인일이며 이번에 검색한 날짜가 아닙니다.'}<br>페이지 수정일: ${escape(source.page_updated_at || '미확인')}</p>${source.reference_year_evidence ? `<blockquote class="source-evidence">${escape(source.reference_year_evidence)}</blockquote>` : ''}<p class="muted">${escape(source.review_note)}</p>` : ''}</div>`;
+}
+
+function updateRetryControls() {
+  const remaining = Math.max(0, Math.ceil((retryAvailableAt - Date.now()) / 1000));
+  const retry = $('#retry-request');
+  if (retry) {
+    retry.disabled = loading || remaining > 0;
+    retry.textContent = remaining ? `${remaining}초 후 다시 시도` : '다시 시도';
+  }
+  $('#filter-form button[type="submit"]').disabled = loading || remaining > 0;
+  if (!remaining && retryTimer !== null) {
+    clearInterval(retryTimer);
+    retryTimer = null;
+  }
+}
 
 function navigate() {
   const page = location.hash.slice(1) || 'dashboard';
@@ -32,21 +64,25 @@ function renderResults() {
   const matches = resources;
   $('#results-title').textContent = `${filters.region} · ${ageLabel(filters.age)}`;
   $('#result-count').textContent = loading ? '조회 중' : errorMessage ? '연결 확인 필요' : !recommendation ? '조회 전' : `확인 후보 ${matches.length}개`;
-  $('#result-description').textContent = recommendation?.mode === 'offline' ? '저장된 자료 조회 테스트입니다. 외부 검색·LLM을 실행하지 않았습니다.' : 'AI가 분석 결과와 외부 검색 근거를 대조해 제안하는 검토 순서입니다. 개인 자격·지원 효과는 확정하지 않습니다.';
+  $('#result-description').textContent = !recommendation ? '지역·연령·지원 목적을 선택하고 복지자원을 추천받으세요.'
+    : recommendation.mode === 'offline' ? '저장된 자료 조회 테스트입니다. 외부 검색·LLM을 실행하지 않았습니다.'
+    : !recommendation.risk_assessment ? '지역·연령·지원 목적과 검색 자료를 바탕으로 찾은 검토 후보입니다. 위험도 분석 결과는 아직 연결되지 않았습니다.'
+    : '전달받은 집단 분석 결과와 검색 근거를 대조한 검토 후보입니다. 개인 자격·지원 효과는 확정하지 않습니다.';
   $('#results').setAttribute('aria-busy', String(loading));
   $('#results').innerHTML = loading ? `<div class="no-results panel">${requestedMode === 'live' ? '공식 사이트를 검색하고 AI가 분석 결과와 자원을 대조하고 있습니다. 잠시 기다려주세요.' : '저장된 자료를 조회하고 있습니다.'}</div>` : errorMessage ? `<div class="no-results panel" role="alert"><strong>자원을 불러오지 못했습니다.</strong><p>${escape(errorMessage)}</p><button id="retry-request" class="secondary">다시 시도</button></div>` : !recommendation ? '<div class="no-results panel"><strong>대상을 선택하고 추천받기를 눌러주세요.</strong><p>실시간 모드는 외부 검색과 AI 판단을 실행합니다. 페이지를 열거나 새로고침하는 것만으로 API를 호출하지 않습니다.</p></div>' : matches.length ? matches.map((item) => `
     <article class="resource-card panel">
-      <div class="card-top"><span class="category ${escape(item.purpose)}">${escape(purposes[item.purpose])}</span><span class="example-tag">운영 확인 필요</span></div>
+      <div class="card-top"><div class="resource-tags"><span class="category ${escape(item.purpose)}">${escape(purposes[item.purpose])}</span>${item.isolation_relevance ? `<span class="relevance-tag ${escape(item.isolation_relevance)}">${escape(relevanceLabels[item.isolation_relevance])} · AI 분류</span>` : ''}</div><span class="example-tag">운영 확인 필요</span></div>
       <h3>${escape(item.name)}</h3><p class="organization">${escape(item.organization)}</p><p class="muted">${escape(({overlap:"연령 범위 겹침",partial:"일부 연령만 해당 · 정확한 나이 확인",unknown:"연령 기준 미확정 · 기관 확인"})[item.age_match])}</p>
       <p class="resource-description">${escape(item.description)}</p>
       <div class="resource-meta"><span>⌖ ${escape(item.region)}</span><span>◷ ${escape(item.format)}</span></div>
-      <p class="muted"><a class="source-link" href="${escape(item.source.url)}" target="_blank" rel="noopener noreferrer">${escape(item.source.title)} ↗</a> · ${escape(item.source.checked_at)}</p>
-      <div class="recommendation-reason"><span aria-hidden="true">✧</span><p><strong>검토 포인트</strong>${escape(item.reason)}<br>${item.match_reasons.map(escape).join(' · ')}</p></div>
+      ${sourceInfo(item)}
+      <div class="recommendation-reason"><span aria-hidden="true">✧</span><p><strong>추천 이유</strong>${escape(item.reason)}${item.relevance_reason ? `<br><strong>고립 예방과의 연결</strong>${escape(item.relevance_reason)}` : ''}<br><strong>신청 전 확인</strong>${item.match_reasons.map(escape).join(' · ')}</p></div>
       <div class="card-bottom"><button class="text-button" data-details="${escape(item.id)}">상세 정보 <span aria-hidden="true">↗</span></button>
       <button class="select-button ${selected.has(item.id) ? 'is-selected' : ''}" data-select="${escape(item.id)}" aria-pressed="${selected.has(item.id)}">${selected.has(item.id) ? '✓ 선택됨' : '+ 기획 목록에 담기'}</button></div>
     </article>`).join('') : `<div class="no-results panel"><strong>근거를 갖춘 후보를 제시하지 못했습니다.</strong><p>${escape(recommendation.coverage?.message || '실제 서비스 부재를 뜻하지 않습니다. 추가 조사가 필요합니다.')}</p></div>`;
   renderSelection();
   renderReview();
+  updateRetryControls();
 
 }
 
@@ -58,6 +94,7 @@ function renderReview() {
   if (panel.hidden) { panel.replaceChildren(); return; }
   const status = {browse:'일반 조회', needs_confirmation:'지원 필요 확인', ready_for_review:'확인한 필요로 후보 검토', risk_held:'위험 판정 보류 · 일반 조회', risk_partial:'불완전한 위험 판정 · 일반 조회'};
   panel.innerHTML = `<h3>${escape(status[review.status])}</h3>
+    ${review.input_note || !risk ? `<p class="input-basis">${escape(review.input_note || '위험도 분석 결과가 연결되지 않아 지역·연령·지원 목적을 기준으로 조회했습니다.')}</p>` : ''}
     ${review.summary ? `<p><strong>AI 추천 판단</strong><br>${escape(review.summary)}</p>` : ''}
     ${risk ? `<p><strong>${risk.is_example ? '예시 위험도 입력 · 실제 분석 결과 아님' : '입력받은 위험도 결과 · 자동 수신 전'}</strong><br>${escape(risk.period)} · ${escape(risk.region)} · ${escape(ageLabel(risk.age_group))} · ${risk.level === null ? '단계 보류' : `${escape(risk.level)}단계`}<br>모델: ${escape(risk.model_version)}</p><ul>${risk.signals.map((signal) => `<li>${escape(signal.description)}</li>`).join('')}${risk.limitations.map((text) => `<li>관측 제한: ${escape(text)}</li>`).join('')}</ul>` : ''}
     ${review.confirmed_support_needs.length ? `<p>담당자가 확인한 필요: ${review.confirmed_support_needs.map((purpose) => escape(recommendation.purposes[purpose])).join(' · ')}</p>` : ''}
@@ -81,7 +118,7 @@ function renderSelection() {
 }
 
 async function queryResources() {
-  if (loading) return;
+  if (loading || Date.now() < retryAvailableAt) return;
   filters = { region: $('#region').value, age: Number($('#age').value), purpose: $('#purpose').value };
   requestedMode = $('#search-mode').value;
   loading = true;
@@ -108,7 +145,14 @@ async function queryResources() {
     });
     if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('추천 API 서버로 접속해주세요. 실행 방법은 frontend/README.md에 있습니다.');
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || '추천 조회에 실패했습니다.');
+    if (!response.ok) {
+      if (Number.isInteger(result.retry_after_seconds) && result.retry_after_seconds > 0 && result.retry_after_seconds <= 60) {
+        retryAvailableAt = Date.now() + result.retry_after_seconds * 1000;
+        if (retryTimer !== null) clearInterval(retryTimer);
+        retryTimer = setInterval(updateRetryControls, 1000);
+      }
+      throw new Error(result.error || '추천 조회에 실패했습니다.');
+    }
     if (result.schema_version !== 'welfare-0.4' || result.is_demo !== false || !result.review || !Array.isArray(result.resources)) throw new Error('지원하지 않는 추천 응답 형식입니다.');
     recommendation = result;
     resources = result.resources;
@@ -145,7 +189,7 @@ $('#results').addEventListener('click', (event) => {
     <h2 id="dialog-title">${escape(item.name)}</h2><p class="muted">${escape(item.organization)}</p>
     <dl><dt>지원 내용</dt><dd>${escape(item.description)}</dd><dt>대상·신청 조건</dt><dd>${escape(item.eligibility)}</dd>
     <dt>운영 기간</dt><dd>${escape(item.schedule)}</dd><dt>확인할 사항</dt><dd>${escape(item.check)}</dd>
-    <dt>신청 방법</dt><dd>${escape(item.application_method)}</dd><dt>공식 출처</dt><dd><a class="source-link" href="${escape(item.source.url)}" target="_blank" rel="noopener noreferrer">${escape(item.source.title)} ↗</a><br>페이지 확인일: ${escape(item.source.checked_at)}<br>페이지 수정일: ${escape(item.source.page_updated_at || "미확인")}<br>${escape(item.source.review_note)}</dd><dt>운영 상태</dt><dd>현재 모집·예산·운영 여부는 기관 확인이 필요합니다. 페이지 확인일은 서비스 검증일이 아닙니다.</dd></dl>`;
+    <dt>신청 방법</dt><dd>${escape(item.application_method)}</dd><dt>공식 출처와 자료 시점</dt><dd>${sourceInfo(item, true)}</dd>${item.isolation_relevance ? `<dt>고립 예방 연관성 · AI 분류</dt><dd>${escape(relevanceLabels[item.isolation_relevance])}<br>${escape(item.relevance_reason)}<br>연관성 분류는 실제 예방 효과가 검증됐다는 뜻이 아닙니다.</dd>` : ''}<dt>운영 상태</dt><dd>현재 모집·예산·운영 여부는 기관 확인이 필요합니다. 검색일·출처 확인일은 서비스의 현행 요건 검증일이 아닙니다.</dd></dl>`;
   $('#resource-dialog').showModal();
 });
 
