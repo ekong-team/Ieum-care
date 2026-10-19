@@ -1,0 +1,3 @@
+# 분석 보고서 그래프. 기본 특징 의존성은 기존 requirements.txt 사용.
+-r requirements.txt
+matplotlib==3.10.7

@@ -1,5 +1,7 @@
 # Python
 .venv/
+.venv-agent/
+.local-archive/
 venv/
 __pycache__/
 *.pyc
@@ -19,6 +21,9 @@ data/processed/*
 # SGIS 원본 경계는 별도 공유하고 출처 문서만 버전 관리
 data/external/sgis/*
 !data/external/sgis/README.md
+
+# 무료 외부 자료 원본은 로컬·제출 묶음에서 보존
+data/external/public_context/
 
 # Node
 node_modules/
