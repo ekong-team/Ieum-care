@@ -23,6 +23,8 @@ SEARCH_CACHE_SECONDS = 300
 SEARCH_CACHE_LIMIT = 16
 SEARCH_CACHE = {}
 SEARCH_CACHE_LOCK = Lock()
+SEARCH_MAX_CALLS = 2
+LOCAL_PAGE_TARGET = 2
 
 
 class AgentError(Exception):
@@ -53,7 +55,7 @@ def config_status():
             "model": config["model"], "provider": "gemini", "search_provider": "tavily"}
 
 
-def response_call(payload, config):
+def response_call(payload, config, *, on_external_call=None):
     # 무료 텍스트 입출력 모델만 사용하고 Gemini 검색 도구는 붙이지 않는다. 다른 모델·유료 제공자로 대체하지 않는다.
     if config["model"] not in FREE_MODELS:
         raise AgentError("GEMINI_MODEL을 gemini-3.5-flash-lite로 설정해주세요. 다른 모델로 자동 전환하지 않습니다.", 503)
@@ -61,6 +63,8 @@ def response_call(payload, config):
                       data=json.dumps(payload).encode("utf-8"),
                       headers={"x-goog-api-key": config['key'], "Content-Type": "application/json"})
     try:
+        if on_external_call:
+            on_external_call("gemini")
         with urlopen(request, timeout=45) as response:
             result = json.load(response)
     except HTTPError as error:
@@ -128,7 +132,7 @@ def official_url(url):
         return None
 
 
-def tavily_search(payload, config):
+def tavily_search(payload, config, *, on_external_call=None):
     """검색 1회만 실행한다. 자동 심화·답변 생성·원문 추출은 사용하지 않는다."""
     # 공개 검색 결과만 잠시 메모리에 보관한다. 분석 입력·모델 판단·인증 키 원문은 보관하지 않는다.
     cache_key = hashlib.sha256((config["search_key"] + json.dumps(payload, sort_keys=True, ensure_ascii=False)).encode()).hexdigest()
@@ -139,6 +143,8 @@ def tavily_search(payload, config):
     request = Request("https://api.tavily.com/search", data=json.dumps(payload).encode("utf-8"),
                       headers={"Authorization": "Bearer " + config["search_key"], "Content-Type": "application/json"})
     try:
+        if on_external_call:
+            on_external_call("tavily")
         with urlopen(request, timeout=30) as response:
             result = json.load(response)
     except HTTPError as error:
@@ -153,8 +159,9 @@ def tavily_search(payload, config):
         raise AgentError("Tavily 검색 응답을 읽지 못했습니다.") from None
     if not isinstance(result, dict) or not isinstance(result.get("results"), list):
         raise AgentError("Tavily 검색 응답 형식이 올바르지 않습니다.")
-    # 공식 근거가 없는 실패·빈 결과는 저장하지 않는다.
-    search_evidence(result)
+    # 정상 빈 응답은 검색 확장 판단에 사용하되 캐시에 저장하지 않는다.
+    if not search_evidence(result, allow_empty=True):
+        return {**result, "search_cache_hit": False}
     result["search_cache_hit"] = False
     result["search_date"] = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
     with SEARCH_CACHE_LOCK:
@@ -168,7 +175,7 @@ def tavily_search(payload, config):
     return result
 
 
-def search_evidence(response):
+def search_evidence(response, *, allow_empty=False):
     # 검색 순위를 위험 점수로 해석하지 않는다. 공식 URL과 내용이 있는 결과만 LLM에 전달한다.
     if not isinstance(response, dict) or not isinstance(response.get("results"), list):
         raise AgentError("Tavily 검색 결과를 확인할 수 없어 추천을 중단했습니다.")
@@ -181,10 +188,70 @@ def search_evidence(response):
         if not url or url in seen or not isinstance(content, str) or not content.strip():
             continue
         seen.add(url)
-        evidence.append({"url": url, "title": str(item.get("title", ""))[:300], "content": content[:6000]})
-    if not evidence:
+        title = str(item.get("title", ""))[:300]
+        path = urlsplit(url).path.lower()
+        # 문서/목록 여부는 검색 순서용 단서다. 내용의 정확성이나 서비스 적합성 점수가 아니다.
+        reference = (path.endswith(".pdf") or any(word in path for word in ("download", "filedown"))
+                     or any(word in title for word in ("백서", "연구용역", "결산", "지역사회보장계획", "회의록")))
+        kind = "reference_document" if reference else "directory" if path in ("", "/") or path.endswith(("list.do", "main.do")) else "web_page"
+        evidence.append({"url": url, "title": title, "content": content[:6000], "source_kind": kind})
+    if not evidence and not allow_empty:
         raise AgentError("Tavily 검색에서 내용이 있는 공식 출처를 확보하지 못했습니다. 자원을 만들어 추천하지 않았습니다.")
     return evidence
+
+
+def search_resources(target, config, search_call):
+    """지역 검색을 먼저 하고 웹 페이지가 부족할 때만 중앙 공식 자료를 1회 보완한다."""
+    local_domain = "chuncheon.go.kr" if target["region"] == "춘천시" else "gangnam.go.kr"
+    age = {10: "아동 청소년", 20: "20대 청년", 30: "30대", 40: "40대 중장년", 50: "50대 중장년", 60: "60대 이상 어르신"}[target["age_group"]]
+    purpose = {"all": "복지서비스", "connection": "사회참여 모임", "daily": "일상돌봄",
+               "wellbeing": "심리상담", "economic": "생활비 지원", "other": "복지 안내"}[target["purpose"]]
+    plan = [("local", f"{target['region']} {age} {purpose} 신청", [local_domain]),
+            ("national", f"{age} {purpose} 대상 신청", ["bokjiro.go.kr", "mohw.go.kr"])]
+    evidence, stages, dates = [], [], {}
+    today = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+    for stage, query, domains in plan[:SEARCH_MAX_CALLS]:
+        payload = {"query": query, "search_depth": "basic", "auto_parameters": False,
+                   "topic": "general", "max_results": 8, "include_domains": domains,
+                   "exclude_domains": ["tms.bokjiro.go.kr"],
+                   "include_answer": False, "include_raw_content": False, "include_usage": True}
+        # 통신 오류·한도 초과는 즉시 중단한다. 정상 응답의 근거 부족만 보완한다.
+        response = search_call(payload, config)
+        found = search_evidence(response, allow_empty=True)
+        # 반환 결과에서도 각 검색 단계의 허용 도메인을 재확인한다.
+        found = [item for item in found if any(urlsplit(item["url"]).hostname == domain or
+                 urlsplit(item["url"]).hostname.endswith("." + domain) for domain in domains)]
+        for item in found:
+            if item["url"] not in dates:
+                evidence.append(item)
+                dates[item["url"]] = response.get("search_date", today)
+        cached = response.get("search_cache_hit") is True
+        usage = response.get("usage", {})
+        credits = usage.get("credits") if isinstance(usage, dict) else None
+        credits = 0 if cached else credits if type(credits) in (int, float) and credits >= 0 else None
+        stages.append({"stage": stage, "query": query, "cache_hit": cached, "credits": credits,
+                       "searched_at": response.get("search_date", today), "source_count": len(found)})
+        # 웹페이지 수만으로 충분하다고 보지 않는다. 대상·신청 설명과 연령 관련 단서를 함께 본다.
+        # 이 단서는 추가 검색 여부에만 쓰며 신청 자격이나 연령 범위를 확정하지 않는다.
+        age_terms = {10: ("아동", "청소년"), 20: ("청년", "20대"), 30: ("청년", "30대"),
+                     40: ("중장년", "40대"), 50: ("중장년", "50대"), 60: ("어르신", "노인", "60세", "65세")}[target["age_group"]]
+        detailed = 0
+        for item in found:
+            text = re.sub(r"\s+", "", item["title"] + " " + item["content"])
+            item["detail_hint"] = (item["source_kind"] == "web_page" and any(word in text for word in age_terms)
+                    and any(word in text for word in ("지원대상", "신청자격", "이용대상", "대상자"))
+                    and any(word in text for word in ("신청방법", "접수", "문의", "참여방법", "이용방법")))
+            if item["detail_hint"]:
+                detailed += 1
+        stages[-1]["detail_hint_count"] = detailed
+        if stage == "local" and detailed >= LOCAL_PAGE_TARGET:
+            break
+    if not evidence:
+        raise AgentError("지역·중앙 공식 검색에서 근거를 확보하지 못했습니다. 검색은 최대 2회에서 중단했습니다.")
+    kind_order = {"web_page": 0, "directory": 1, "reference_document": 2}
+    evidence.sort(key=lambda item: (not item.get("detail_hint", False), kind_order[item["source_kind"]],
+                                  not (urlsplit(item["url"]).hostname == local_domain or urlsplit(item["url"]).hostname.endswith("." + local_domain))))
+    return evidence[:8], stages, dates
 
 
 def gemini_schema(schema):
@@ -229,6 +296,12 @@ RESULT_SCHEMA = object_schema({"summary": STRING, "questions": STRINGS, "resourc
 
 JUDGE_INSTRUCTIONS = """복지자원 추천 Agent다. 제공된 집단 분석 결과, 담당자 확인 정보와 검색 근거를 대조해
 검토할 가치가 높은 자원 최대 5개를 판단하고 그 순서로 반환하라. 고정된 서비스 목록이나 신호-서비스 매핑은 없다.
+analysis_context가 있으면 profile.evidence의 id·value·unit·period·source를 그대로 근거로 사용하라.
+ratio와 percent를 혼동하지 말고 수치·출처를 새로 만들지 마라. causes는 확인이 필요한 원인 가설이며 진단이 아니다.
+가설의 evidence_ids로 실제 근거를 추적하라. 판정이 없거나 held/partial이면 원인을 확정하거나 위험 단계를 재해석하지 마라.
+성별은 선택 집단의 맥락일 뿐 개인의 신청 자격을 보장하지 않는다.
+중앙 자료는 해당 지역의 시행·모집을 보증하지 않는다. 지역 제공 여부가 미확인이면 이를 명시하라.
+source_kind와 detail_hint는 자료 형식·검색 발췌문의 단서이며 내용 정확도·최신성·적합성 점수가 아니다.
 추천 이유에는 입력의 어떤 근거와 연결되는지, 아직 무엇을 모르는지 설명하라. 확인된 필요는 중요한 참고 정보이며
 확인되지 않은 필요도 검토 가설로 설명할 수 있지만 개인의 상태나 신청 자격으로 확정하지 마라.
 보류·불완전 판정의 제한을 보존하고 완료된 위험 판정처럼 해석하지 마라. 소비·이동 감소만으로 질환·빈곤·고립을 단정하지 마라.
@@ -259,31 +332,24 @@ eligibility 또는 check에 포함하고 무료라고 가정하지 마라. 추�
 적절한 검색 근거가 없으면 resources를 비우고 summary에 한계를 설명하라. 답변은 한국어로 작성하라."""
 
 
-def recommend_live(payload, *, call=None, search_call=None):
+def recommend_live(payload, *, call=None, search_call=None, on_external_call=None):
     target = validate_request(payload)
     config = configuration()
     if not config["key"].strip():
         raise AgentError("Gemini API 키가 없습니다. 프로젝트 .env에 GEMINI_API_KEY를 설정해주세요. 저장 자료로 자동 대체하지 않습니다.", 503)
     if not config["search_key"].strip():
         raise AgentError("Tavily API 키가 없습니다. 프로젝트 .env에 TAVILY_API_KEY를 설정해주세요.", 503)
-    call = call or response_call
-    search_call = search_call or tavily_search
+    call = call or (lambda data, settings: response_call(data, settings, on_external_call=on_external_call))
+    search_call = search_call or (lambda data, settings: tavily_search(data, settings, on_external_call=on_external_call))
     today = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
     context = {"today": today, "target": target, "risk_assessment": payload.get("risk_assessment"),
                "confirmed_support_needs": payload.get("confirmed_support_needs", [])}
+    if "analysis_context" in payload:
+        context["analysis_context"] = payload["analysis_context"]
     if config["model"] not in FREE_MODELS:
         raise AgentError("GEMINI_MODEL을 gemini-3.5-flash-lite로 설정해주세요.", 503)
-    # 검색어에는 지역·연령·목적만 담는다. 자유 입력 위험 근거는 검색 업체에 전송하지 않는다.
-    age = target["age_group"]
-    age_text = "60대 이상 노인 중장년" if age == 60 else "아동 청소년" if age == 10 else f"{age}대"
-    purpose = "고립 예방 사회참여 안부확인 생활 지원" if target["purpose"] == "all" else PURPOSES[target["purpose"]]
-    local_domain = "chuncheon.go.kr" if target["region"] == "춘천시" else "gangnam.go.kr"
-    search_payload = {"query": f"{target['region']} {age_text} {purpose} 복지 서비스 지원 대상 신청 방법",
-                      "search_depth": "basic", "auto_parameters": False, "topic": "general", "max_results": 8,
-                      "include_domains": [local_domain, "bokjiro.go.kr", "mohw.go.kr"],
-                      "include_answer": False, "include_raw_content": False, "include_usage": True}
-    search = search_call(search_payload, config)
-    evidence = search_evidence(search)
+    # 검색에는 공개 조건만, 현재 분석 결과는 Gemini 판단에만 전달한다.
+    evidence, stages, source_dates = search_resources(target, config, search_call)
     sources = {item["url"] for item in evidence}
     judged = call({"systemInstruction": {"parts": [{"text": JUDGE_INSTRUCTIONS}]},
                    "contents": [{"role": "user", "parts": [{"text": json.dumps({"context": context, "search_evidence": evidence, "source_urls": sorted(sources)}, ensure_ascii=False)}]}],
@@ -292,16 +358,22 @@ def recommend_live(payload, *, call=None, search_call=None):
     try:
         decision = json.loads(output_text(judged))
         result = checked_result(decision, payload, sources, today, config["model"], evidence)
-        # 자정을 지나 재사용하더라도 실제 검색한 날짜를 유지한다.
-        search_date = search.get("search_date", today)
-        result["searched_at"] = search_date
+        # 단계마다 실제 검색일을 유지한다. 캐시와 신규 검색이 섞여 있을 수 있다.
+        result["searched_at"] = min(source_dates[item["url"]] for item in evidence)
         for resource in result["resources"]:
-            resource["source"]["checked_at"] = search_date
-        result["search_query"] = search_payload["query"]
-        usage = search.get("usage", {})
-        credits = usage.get("credits") if isinstance(usage, dict) else None
-        result["search_cache_hit"] = search.get("search_cache_hit") is True
-        result["search_credits"] = 0 if result["search_cache_hit"] else credits if type(credits) in (int, float) and credits >= 0 else None
+            resource["source"]["checked_at"] = source_dates[resource["source"]["url"]]
+        if "analysis_context" in payload:
+            result["analysis_context"] = deepcopy(payload["analysis_context"])
+            if payload["analysis_context"]["profile"]["is_example"] and not result["has_example_context"]:
+                result["has_example_context"] = True
+                result["warnings"].append("분석 맥락은 예시이며 실제 분석 결과가 아닙니다.")
+        result["search_query"] = stages[0]["query"]
+        result["search_queries"] = [stage["query"] for stage in stages]
+        result["search_stages"] = stages
+        result["search_cache_hit"] = all(stage["cache_hit"] for stage in stages)
+        result["search_new_calls"] = sum(not stage["cache_hit"] for stage in stages)
+        result["search_credits"] = (sum(stage["credits"] for stage in stages)
+                                    if all(stage["credits"] is not None for stage in stages) else None)
         return result
     except (ValueError, KeyError, TypeError):
         raise AgentError("AI 추천 결과의 형식·출처·조건 검증에 실패했습니다. 결과를 사용하지 않았습니다.") from None
@@ -401,7 +473,7 @@ def checked_result(decision, payload, sources, today, model, evidence):
     return {"schema_version": "welfare-0.4", "is_demo": False, "mode": "live", "recommendation_method": "tavily_search_gemini_judgment_v1",
             "catalog_version": None, "provider": "gemini", "search_provider": "tavily", "model": model, "searched_at": today, "target": payload["target"], "risk_assessment": risk,
             "has_example_context": bool(risk and risk["is_example"]), "purposes": PURPOSES,
-            "review": {"rules_version": "llm-grounding-0.3", "status": status,
+            "review": {"rules_version": "llm-grounding-0.4", "status": status,
                        "input_note": ("위험도 분석 결과가 연결되지 않아 지역·연령·지원 목적과 선택한 추가 정보를 기준으로 추천했습니다."
                                       if not risk else "전달받은 위험도 결과를 참고했습니다. 집단의 위험 신호가 개인의 지원 필요나 신청 자격을 뜻하지는 않습니다."),
                        "summary": reader_text(decision["summary"]) if not excluded else "일부 후보가 출처·지역·연령·종료 검증에서 제외되었습니다. 원래 AI 요약은 표시하지 않으며 남은 후보의 근거를 검토해주세요.",

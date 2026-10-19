@@ -5,9 +5,10 @@ import io
 import json
 import unittest
 from unittest.mock import patch, Mock
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 
-from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, config_status, SEARCH_CACHE, SEARCH_CACHE_LIMIT
+from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, search_resources, config_status, SEARCH_CACHE, SEARCH_CACHE_LIMIT
 
 URL = 'https://www.chuncheon.go.kr/service-test'
 
@@ -37,7 +38,7 @@ class LiveAgentTests(unittest.TestCase):
         self.config_patch = patch('ai.welfare_agent.live_agent.configuration', return_value=self.config)
         self.config_patch.start()
         self.addCleanup(self.config_patch.stop)
-        self.search = {'results': [{'url': URL, 'title': '가상 검색 출처', 'content': '가상 검색 근거'}], 'usage': {'credits': 1}}
+        self.search = {'results': [{'url': URL, 'title': '가상 검색 출처', 'content': '가상 검색 근거 · 노인 지원대상과 신청방법 안내'}, {'url': URL + '-second', 'title': '다른 지역 공식 안내', 'content': '추가 검색 근거 · 어르신 이용대상과 문의 안내'}], 'usage': {'credits': 1}}
 
     def run_agent(self, decision=None, search=None):
         call = Mock(return_value={'candidates': [message(json.dumps(decision or example_decision()))]})
@@ -72,6 +73,34 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual(result['resources'][0]['support_basis'], 'llm_analysis_match')
         self.assertEqual(result['review']['summary'], example_decision()['summary'])
 
+    def test_analysis_context_reaches_gemini_but_not_search(self):
+        from ai.contracts import TargetProfile, CauseHypothesis
+        from ai.nodes.welfare import to_welfare_payload
+        data = json.loads((Path(__file__).parent / 'fixtures' / 'target_profile_example.json').read_text(encoding='utf-8'))
+        profile = TargetProfile.model_validate(data)
+        self.payload, _ = to_welfare_payload(profile, 'test', causes=[CauseHypothesis(
+            code='C3_overall_withdrawal', evidence_ids=['E1', 'E2'], explanation='확인할 가설 전용 문장')])
+        decision = example_decision()
+        decision['resources'][0]['age_ranges'] = [{'min': 20, 'max': 39}]
+        # 표본은 20대이므로 해당 검색 단서로 채운다.
+        search_response = copy.deepcopy(self.search)
+        for item in search_response['results']:
+            item['content'] = '청년 지원대상과 신청방법 안내'
+        search = Mock(return_value=search_response)
+        call = Mock(return_value={'candidates': [message(json.dumps(decision))]})
+        original = copy.deepcopy(self.payload)
+        result = recommend_live(self.payload, call=call, search_call=search)
+        context = json.loads(call.call_args.args[0]['contents'][0]['parts'][0]['text'])['context']['analysis_context']
+        self.assertEqual(context['profile']['evidence'][0]['value'], -0.083)
+        self.assertEqual(context['profile']['evidence'][0]['unit'], 'ratio')
+        self.assertEqual(context['causes'][0]['evidence_ids'], ['E1', 'E2'])
+        search_text = json.dumps(search.call_args.args[0], ensure_ascii=False)
+        self.assertNotIn('확인할 가설 전용 문장', search_text)
+        self.assertNotIn('-0.083', search_text)
+        self.assertNotIn('analysis_context', search_text)
+        self.assertEqual(result['analysis_context'], original['analysis_context'])
+        self.assertEqual(self.payload, original)
+
     def test_missing_key_does_not_call_provider_or_fall_back(self):
         self.config['key'] = ''
         call = Mock()
@@ -79,6 +108,94 @@ class LiveAgentTests(unittest.TestCase):
             recommend_live(self.payload, call=call)
         self.assertEqual(error.exception.status, 503)
         call.assert_not_called()
+
+    def test_local_search_is_short_and_age_specific(self):
+        target = {'region': '강남구', 'age_group': 20, 'purpose': 'wellbeing'}
+        search = Mock(return_value={'results': [{'url': 'https://health.gangnam.go.kr/service', 'content': '청년 지원대상 및 신청방법 상담 안내'},
+                                               {'url': 'https://www.gangnam.go.kr/youth/view.do', 'content': '청년 이용대상 및 접수 안내'}]})
+        evidence, stages, _ = search_resources(target, self.config, search)
+        self.assertEqual(search.call_count, 1)
+        request = search.call_args.args[0]
+        self.assertEqual(request['include_domains'], ['gangnam.go.kr'])
+        self.assertIn('20대 청년', request['query'])
+        self.assertIn('심리상담', request['query'])
+        self.assertNotIn('어르신', request['query'])
+        self.assertLessEqual(len(request['query'].split()), 7)
+        self.assertEqual(len(evidence), 2)
+        self.assertEqual(stages[0]['stage'], 'local')
+
+    def test_empty_local_search_gets_one_national_expansion(self):
+        search = Mock(side_effect=[{'results': [], 'usage': {'credits': 1}},
+                                  {'results': [{'url': 'https://www.bokjiro.go.kr/service', 'content': '서비스 조건 안내'}], 'usage': {'credits': 1}}])
+        evidence, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(search.call_args_list[1].args[0]['include_domains'], ['bokjiro.go.kr', 'mohw.go.kr'])
+        self.assertEqual([s['stage'] for s in stages], ['local', 'national'])
+        self.assertEqual(sum(s['credits'] for s in stages), 2)
+        self.assertEqual(evidence[0]['url'], 'https://www.bokjiro.go.kr/service')
+
+    def test_reference_documents_do_not_prevent_expansion_and_rank_after_pages(self):
+        search = Mock(side_effect=[{'results': [{'url': URL, 'content': '일반 웹 안내'},
+                                               {'url': 'https://www.chuncheon.go.kr/report.pdf', 'title': '연구용역 보고서', 'content': '계획'}]},
+                                  {'results': [{'url': 'https://www.mohw.go.kr/service', 'content': '중앙 서비스 안내'}]}])
+        evidence, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(len(stages), 2)
+        self.assertEqual([e['source_kind'] for e in evidence], ['web_page', 'web_page', 'reference_document'])
+        self.assertEqual(evidence[0]['url'], URL)
+
+    def test_domain_filter_is_checked_again_for_each_stage(self):
+        search = Mock(return_value={'results': [{'url': 'https://www.gangnam.go.kr/not-chuncheon', 'content': '다른 지역'},
+                                               {'url': 'https://tms.bokjiro.go.kr/TMS/tracking', 'content': '추적 링크'}]})
+        with self.assertRaises(AgentError):
+            search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(search.call_count, 2)
+
+    def test_generic_pages_do_not_count_as_detailed_service_guidance(self):
+        search = Mock(side_effect=[{'results': [{'url': URL, 'title': '홈페이지 이용안내', 'content': '배너 안내'},
+                                               {'url': URL + '-news', 'title': '일반 뉴스', 'content': '행사 소식'}]},
+                                  {'results': [{'url': 'https://www.mohw.go.kr/service',
+                                                'content': '노인 지원대상과 신청방법 안내'}]}])
+        evidence, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(stages[0]['detail_hint_count'], 0)
+        self.assertTrue(evidence[0]['detail_hint'])
+        self.assertEqual(evidence[0]['url'], 'https://www.mohw.go.kr/service')
+
+    def test_combined_sources_are_capped_and_reference_documents_rank_later(self):
+        search = Mock(side_effect=[{'results': [{'url': f'https://www.chuncheon.go.kr/report{i}.pdf', 'content': '자료'} for i in range(8)]},
+                                  {'results': [{'url': f'https://www.mohw.go.kr/service{i}',
+                                                'content': '노인 지원대상과 신청방법 안내'} for i in range(8)]}])
+        evidence, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(len(stages), 2)
+        self.assertEqual(len(evidence), 8)
+        self.assertTrue(all(item['source_kind'] == 'web_page' for item in evidence))
+
+    def test_expansion_stops_on_limit_and_preserves_call_bound(self):
+        for failure in (AgentError('한도', 429), AgentError('연결', 504)):
+            search, call = Mock(side_effect=failure), Mock()
+            with self.subTest(status=failure.status), self.assertRaises(AgentError):
+                recommend_live(self.payload, call=call, search_call=search)
+            search.assert_called_once()
+            call.assert_not_called()
+        search, call = Mock(return_value={'results': []}), Mock()
+        with self.assertRaises(AgentError):
+            recommend_live(self.payload, call=call, search_call=search)
+        self.assertEqual(search.call_count, 2)
+        call.assert_not_called()
+
+    def test_partial_cache_reports_total_cost_and_source_dates(self):
+        search = Mock(side_effect=[{'results': [{'url': URL, 'content': '지역 안내'}], 'search_cache_hit': True,
+                                   'search_date': '2026-10-18', 'usage': {'credits': 1}},
+                                  {'results': [{'url': 'https://www.bokjiro.go.kr/service', 'content': '중앙 안내'}],
+                                   'search_date': '2026-10-19', 'usage': {'credits': 1}}])
+        call = Mock(return_value={'candidates': [message(json.dumps(example_decision()))]})
+        result = recommend_live(self.payload, call=call, search_call=search)
+        self.assertEqual(result['search_credits'], 1)
+        self.assertEqual(result['search_new_calls'], 1)
+        self.assertFalse(result['search_cache_hit'])
+        self.assertEqual(len(result['search_queries']), 2)
+        self.assertEqual(result['resources'][0]['source']['checked_at'], '2026-10-18')
+        call.assert_called_once()
 
     def test_economic_support_is_distinct_from_isolation_relevance(self):
         decision = example_decision()
@@ -297,7 +414,7 @@ class LiveAgentTests(unittest.TestCase):
             first['results'].clear()
             clock.return_value = 200
             second = tavily_search({'query': '검색'}, self.config)
-            self.assertEqual(len(second['results']), 1)
+            self.assertEqual(len(second['results']), 2)
             self.assertTrue(second['search_cache_hit'])
             clock.return_value = 401
             third = tavily_search({'query': '검색'}, self.config)

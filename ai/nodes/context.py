@@ -4,12 +4,15 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Literal
 
+from ai.contracts.causes import CauseHypothesis
+
 
 @dataclass
 class NodeContext:
     run_id: str
     mode: Literal["live", "offline"]  # offline = 외부 호출 없이 저장 자료·가짜 응답 사용
     calls: Counter = field(default_factory=Counter)
+    cause_hypotheses: list[CauseHypothesis] = field(default_factory=list)
 
     def count(self, provider: str, n: int = 1) -> None:
         """provider: "gemini" 또는 "tavily". 비용·무료 한도 확인용."""

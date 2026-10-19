@@ -87,7 +87,8 @@ class _Node:
         self.name, self.recorder, self.body, self.on_error, self.fallback = name, recorder, body, on_error, fallback
 
     def __call__(self, state: PipelineState) -> dict:
-        ctx = NodeContext(run_id=state["run_id"], mode=state["mode"])
+        ctx = NodeContext(run_id=state["run_id"], mode=state["mode"],
+                          cause_hypotheses=state.get("causes", []))
         started = self.recorder.emit(self.name, "started")
         clock = monotonic()
         try:
@@ -120,10 +121,13 @@ def build_graph(engines: Optional[Engines] = None, recorder: Optional[TraceRecor
 
     def welfare_recommend(ctx, state):
         result = engines.recommend_existing(ctx, state["profile"])
+        if result.response_routing is None:
+            result = welfare.attach_response_routes(result)
+        routing_notes = ["대응 검토: " + " / ".join(route.title for route in result.response_routing.routes)]
         if result.status == "available":
-            return {"existing_resources": result}, f"기존 자원 {len(result.resources)}개 확인", result.warnings[:3]
+            return {"existing_resources": result}, f"기존 자원 {len(result.resources)}개 확인", routing_notes + result.warnings[:3]
         return ({"existing_resources": result, "warnings": [result.reason or "기존 자원 확인 불가"]},
-                "기존 자원 확인 불가, 기획은 계속", [result.reason or ""])
+                "기존 자원 확인 불가, 기획은 계속", routing_notes + [result.reason or ""])
 
     def trend_search(ctx, state):
         found = engines.search_trends(ctx, _planning(state))
@@ -239,7 +243,8 @@ def build_graph(engines: Optional[Engines] = None, recorder: Optional[TraceRecor
     graph.add_node("cause_analysis", node("cause_analysis", cause_analysis, "continue",
                                           lambda s: {"causes": [CauseHypothesis(code="C0_unknown")]}))
     graph.add_node("welfare_recommend", node("welfare_recommend", welfare_recommend, "continue",
-                                             lambda s: {"existing_resources": ExistingResources(status="unavailable", reason="노드 오류")}))
+                                             lambda s: {"existing_resources": welfare.attach_response_routes(
+                                                 ExistingResources(status="unavailable", reason="노드 오류", has_example_context=s["profile"].is_example))}))
     graph.add_node("trend_search", node("trend_search", trend_search, "continue", lambda s: {"trend_references": []}))
     graph.add_node("gap_analysis", node("gap_analysis", gap_analysis, "continue",
                                         lambda s: {"gaps": [GapItem(cause=c.code, coverage="unknown", reason="공백 분석 실패")

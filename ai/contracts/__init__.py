@@ -4,7 +4,8 @@ from ai.contracts.causes import CAUSE_LABELS, CauseCode, CauseHypothesis
 from ai.contracts.evaluation import (AXIS_LABELS, AXIS_MAX, PASS_SCORE, AxisScore, PlanEvaluation,
                                      RevisionRequest, summarize, total_score)
 from ai.contracts.pipeline import (ExistingResource, ExistingResources, FinalReport, GapItem, GroundingIssue,
-                                   GroundingReport, PipelineState, TraceEvent, TrendReference)
+                                   GroundingReport, PipelineState, TraceEvent, TrendReference, WelfareAnalysisContext,
+                                   ResponseRoute, ResponseRouting)
 from ai.contracts.plan import (KPI, MAX_REVISIONS, Activity, BudgetItem, Novelty, Operation, ProgramPlan,
                                RiskMitigation, Schedule, TrendRef)
 from ai.contracts.profile import SIGNAL_LABELS, Evidence, RiskInfo, Target, TargetProfile
@@ -14,5 +15,5 @@ __all__ = [
     "Evidence", "ExistingResource", "ExistingResources", "FinalReport", "GapItem", "GroundingIssue", "GroundingReport",
     "KPI", "MAX_REVISIONS", "Novelty", "Operation", "PASS_SCORE", "PipelineState", "PlanEvaluation", "ProgramPlan", "RevisionRequest",
     "RiskInfo", "RiskMitigation", "Schedule", "SIGNAL_LABELS", "Target", "TargetProfile", "TraceEvent", "TrendRef",
-    "TrendReference", "summarize", "total_score",
+    "TrendReference", "WelfareAnalysisContext", "ResponseRoute", "ResponseRouting", "summarize", "total_score",
 ]

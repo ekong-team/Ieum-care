@@ -23,7 +23,7 @@ def validate_request(payload):
     """임의의 나이·지역이나 지원하지 않는 입력을 조용히 무시하지 않는다."""
     if not isinstance(payload, dict):
         raise ValueError("요청은 JSON 객체여야 합니다.")
-    if set(payload) - {"target", "risk_assessment", "confirmed_support_needs"}:
+    if set(payload) - {"target", "risk_assessment", "confirmed_support_needs", "analysis_context"}:
         raise ValueError("지원하지 않는 요청 항목이 있습니다.")
     target = payload.get("target")
     if not isinstance(target, dict) or set(target) != {"region", "age_group", "purpose"}:
@@ -38,7 +38,31 @@ def validate_request(payload):
     if not isinstance(needs, list) or any(not isinstance(need, str) or need not in PURPOSES for need in needs) or len(set(needs)) != len(needs):
         raise ValueError("confirmed_support_needs는 중복 없는 지원 목적 목록이어야 합니다.")
     validate_risk(payload.get("risk_assessment"), target)
+    if "analysis_context" in payload:
+        validate_analysis_context(payload, target)
     return dict(target)
+
+
+def validate_analysis_context(payload, target):
+    # 기존 요청은 그대로 지원한다. 공통 맥락이 있을 때만 팀 공통 계약으로 교차 검증한다.
+    from ai.contracts import WelfareAnalysisContext
+    if not isinstance(payload["analysis_context"], dict):
+        raise ValueError("분석 맥락은 JSON 객체여야 합니다.")
+    try:
+        context = WelfareAnalysisContext.model_validate(payload["analysis_context"])
+    except ValueError:
+        raise ValueError("분석 맥락의 형식 또는 원인 가설의 근거 참조가 올바르지 않습니다.") from None
+    profile, risk = context.profile, payload.get("risk_assessment")
+    if profile.target.region != target["region"] or profile.target.age_group != target["age_group"]:
+        raise ValueError("분석 맥락과 추천 대상의 지역·연령대가 다릅니다.")
+    if (profile.risk is None) != (risk is None):
+        raise ValueError("분석 맥락과 위험도 입력의 유무가 다릅니다.")
+    if risk is not None and (profile.risk.status != risk["status"] or profile.risk.level != risk["level"]
+                             or profile.period != risk["period"] or profile.is_example != risk["is_example"]
+                             or set(profile.signals) != {item["type"] for item in risk["signals"]}
+                             or (profile.risk.model_version or "manual-input") != risk["model_version"]
+                             or profile.limitations != risk["limitations"]):
+        raise ValueError("분석 맥락과 위험도 입력의 상태·기간·근거가 일치하지 않습니다.")
 
 
 def validate_risk(risk, target):

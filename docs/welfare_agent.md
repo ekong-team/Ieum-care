@@ -17,7 +17,7 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 
 Tavily는 Free 플랜, Google AI Studio는 결제가 연결되지 않은 무료 등급을 유지한다. 앱은 두 계정의 결제 등급을 확인하거나 변경하지 않는다. 유료 계정의 키라면 같은 호출이 과금될 수 있다.
 
-페이지 진입·새로고침에는 외부 검색·모델을 호출하지 않는다. 버튼 클릭 시 Tavily `/search` 기본 검색 최대 1회와 Gemini `generateContent` 판단 1회를 실행한다. 같은 검색은 아래 임시 캐시를 재사용할 수 있다. `search_depth=basic`, `auto_parameters=false`로 고정하고 Tavily 답변 생성·추가 원문 추출은 요청하지 않는다. 기본 검색은 현재 요청당 1크레딧이다. 자동 재시도·심화 검색·다른 모델·저장 목록으로의 대체는 없다. 검색 한도(402/429/432/433)나 Gemini 한도(429)에 도달하면 중단한다.
+페이지 진입·새로고침에는 외부 검색·모델을 호출하지 않는다. 버튼 클릭 시 Tavily `/search` 기본 검색 최대 2회와 Gemini `generateContent` 판단 1회를 실행한다. 같은 검색은 아래 임시 캐시를 재사용할 수 있다. `search_depth=basic`, `auto_parameters=false`로 고정하고 Tavily 답변 생성·추가 원문 추출은 요청하지 않는다. 기본 검색은 현재 요청당 1크레딧이다. 정상적인 근거 부족일 때의 별도 중앙 검색 외에는 자동 재시도·심화 검색·다른 모델·저장 목록으로의 대체는 없다. 검색 한도(402/429/432/433)나 Gemini 한도(429)에 도달하면 중단한다.
 
 키는 서버에서만 읽는다. Tavily에는 지역·연령대·목적 검색어만, Gemini에는 이 조건과 검색 내용·전달받은 집단 위험도·선택적인 담당자 확인 정보를 전송한다. 원본 파일은 읽거나 전송하지 않는다. 자유 입력에는 공유 가능한 집계 결과만 사용하며 개인 식별 정보를 넣지 않는다. Tavily 키는 고정 검색 API의 Authorization 헤더, Gemini 키는 고정 API의 x-goog-api-key 헤더로만 전송한다. 브라우저 상태 API는 두 키의 설정 여부만 반환하며 인증 성공·무료 등급을 보증하지 않는다.
 
@@ -27,13 +27,25 @@ Tavily는 Free 플랜, Google AI Studio는 결제가 연결되지 않은 무료 
 
 Tavily가 지역·연령·목적으로 검색하고, Gemini가 검색 결과와 분석 결과·선택적 추가 정보를 대조해 최대 5개 검토 후보를 판단한다. 관계 형성/일상생활/정서/경제·생활 안정/기타·통합 안내는 화면 분류이며 고정 신호 매핑이 아니다. 체크박스는 선택적인 추가 정보이고 필수 게이트가 아니다. 분석이 없으면 지역·연령·목적에 따른 추천이라고 설명하도록 지시한다.
 
-Tavily의 include_domains에 선택 지역 공식 사이트(chuncheon.go.kr 또는 gangnam.go.kr), bokjiro.go.kr, mohw.go.kr을 지정한다. 반환 결과에서도 허용된 HTTPS 공식 URL인지 다시 검사한다. 최대 8개 결과 중 내용이 있는 중복 없는 출처만 사용하고, 각 검색 내용은 최대 6,000자로 제한한다. 링크를 직접 수집·추출하는 추가 호출은 없다. Gemini가 반환한 source_url이 실제 검색 출처에 없으면 제외한다. 다른 지역, 명확한 연령 불일치, 종료 표시, 중복 후보도 제외한다. 초기 도메인은 모든 공공·민간 자원을 포괄하지 않으며 내용은 검색 발췌문 수준이다.
+Tavily의 include_domains는 1단계에서 선택 지역 공식 사이트(chuncheon.go.kr 또는 gangnam.go.kr)만 지정하고, 지역의 상세 안내 단서가 2개 미만이면 2단계에서 bokjiro.go.kr·mohw.go.kr만 검색한다. 반환 결과에서도 허용된 HTTPS 공식 URL인지 다시 검사한다. 각 단계 최대 8개 결과에서 내용이 있는 중복 없는 출처를 합쳐 최종 8개 이내로 사용하고, 각 검색 내용은 최대 6,000자로 제한한다. 링크를 직접 수집·추출하는 추가 호출은 없다. Gemini가 반환한 source_url이 실제 검색 출처에 없으면 제외한다. 다른 지역, 명확한 연령 불일치, 종료 표시, 중복 후보도 제외한다. 초기 도메인은 모든 공공·민간 자원을 포괄하지 않으며 내용은 검색 발췌문 수준이다.
 
 검색 출처 URL 일치는 원문 전체의 사실·최신성 검증이 아니다. 미명시 연령·지역 제공 여부·지난 공고 해석을 LLM이 틀릴 수 있어 담당자 검토가 필요하다. 신뢰할 검색 근거가 없거나 응답이 불완전하면 오류 또는 빈 결과를 보여주며 고정 목록으로 성공처럼 대체하지 않는다. 출처 등의 검사로 후보가 제외되면 제외된 자원을 언급할 수 있는 원래 AI 요약도 표시하지 않는다.
 
 LLM 설명·추가 질문·검색 출처·관측 제한·예시 여부를 화면과 내보내기에 보존한다. 위험 단계 계산과 개인의 진단·고립 확률·자격 확정은 이 Agent의 역할이 아니다. 보류/불완전 상태는 응답 구조에서 보존하며 LLM에도 해석 제한으로 전달한다.
 
 공식 구현 근거: [Tavily 검색](https://docs.tavily.com/documentation/api-reference/endpoint/search), [Tavily 크레딧](https://docs.tavily.com/documentation/api-credits), [generateContent](https://ai.google.dev/api/generate-content), [구조화 출력](https://ai.google.dev/gemini-api/docs/structured-output), [무료 등급·검색 요금](https://ai.google.dev/gemini-api/docs/pricing).
+
+## 지역 우선 검색과 중앙 보완
+
+검색어는 지역·연령 표현·목적·신청으로 짧게 구성한다. 지원 목적은 사회참여 모임/일상돌봄/심리상담/생활비 지원/복지 안내로 나눠 검색하고 전체 목적은 복지서비스를 검색한다. 특정 프로그램 이름을 고정하지 않는다. 자유 입력 위험 근거는 Tavily 검색어에 넣지 않는다.
+
+지역 공식 사이트부터 검색한다. 일반 웹페이지의 검색 발췌문에 연령 관련 표현, 대상 조건, 신청·접수·문의 단서가 함께 있는 결과가 2개 미만일 때만 중앙 공식 자료를 1회 보완한다. 이 기준은 추가 검색 여부와 정렬에만 사용하며 개인 자격·서비스 적합성 판정이 아니다. 정책 경진대회나 오래된 안내가 단서를 포함할 수도 있어 정확도를 보증하지 않는다.
+
+자료는 상세 단서가 있는 결과, 일반 웹페이지, 목록, PDF·백서·연구·계획 자료 순으로 검토하며 같은 수준에서는 지역 자료를 우선한다. 원문 전체를 읽은 분류는 아니며 경로·제목·검색 발췌문을 이용한 검색 단서다. 반환 결과에서도 단계별 허용 도메인을 다시 검사한다. 중앙 제도를 찾았다는 이유로 해당 지역의 운영·모집을 확정하지 않도록 Gemini에도 제한을 전달한다.
+
+정상 빈 결과는 중앙 검색으로 보완할 수 있지만 429·권한·통신·서버 오류는 즉시 중단한다. 두 단계 모두 근거가 없으면 최대 2회에서 종료하고 Gemini를 호출하지 않는다. 지역 검색이 충분하면 1회만 실행한다. 각 검색의 5분 캐시도 유지한다.
+
+`search_query`는 첫 검색어로 유지하고 `search_queries`, `search_stages`에 실제 검색 단계·검색어·캐시 여부·제공자 보고 크레딧·출처 수·상세 단서 수를 기록한다. `search_new_calls`는 이번 추천의 신규 검색 호출 수다. `search_credits`는 단계별 신규 검색의 보고값 합계이며 하나라도 미제공이면 null이다. 전부 캐시일 때만 search_cache_hit=true이고, 혼합 사용 시 각 단계의 cache_hit를 확인한다. 출처마다 실제 검색일을 유지한다.
 
 ## Gemini 일시 중단(503)과 수동 재시도
 
@@ -94,7 +106,7 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 - `is_demo`: false는 **자원 목록이 실제 공식 안내 기반**이라는 뜻이다. `has_example_context`가 true이면 위험도 맥락은 가상 입력이다. 둘은 구분해야 한다.
 - live의 `recommendation_method`: tavily_search_gemini_judgment_v1, catalog_version은 null. model·search_provider·searched_at·search_query·search_credits·search_sources·excluded_count를 함께 반환한다. search_credits는 신규 검색 시 제공자 보고값이며 미제공 시 null이다. 캐시 재사용 시 search_cache_hit=true와 search_credits=0을 반환한다. offline에서는 기존 목록 버전과 필터 방식을 표시한다.
 - `target`, `risk_assessment`: 조회 집단과 전달받은 위험도 결과. 위험 단계를 재계산하지 않는다.
-- live의 review는 LLM 요약(summary)·추가 질문을 포함하며 rules_version은 llm-grounding-0.3다. input_note는 위험도 입력 유무에 따른 서버의 안내이며 LLM의 판단 요약과 구분한다. offline은 support-review-0.2 규칙을 사용한다.
+- live의 review는 LLM 요약(summary)·추가 질문을 포함하며 rules_version은 llm-grounding-0.4다. input_note는 위험도 입력 유무에 따른 서버의 안내이며 LLM의 판단 요약과 구분한다. offline은 support-review-0.2 규칙을 사용한다.
 - `resources`, `total`: 결과 목록과 개수. 일치가 없어도 정상 200, 빈 배열을 반환한다.
 - `coverage`: candidates_found 또는 (live) no_grounded_candidates/(offline) no_candidates_in_catalog와 해석 설명. 후보가 없더라도 서비스 부재·지원 불필요 판정으로 해석하지 않는다.
 - 각 자원: 식별자·지역·설명·지원 목적·조건·운영 방식·일치 근거(`match_reasons`)·확인 사항.
@@ -106,7 +118,7 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 - `warnings`: 과거 안내 가능성·현재 운영 미확인·자격/순위 미판정·미연동에 관한 주의사항.
 - live의 support_basis는 llm_analysis_match다. offline은 staff_confirmed_need(담당자가 확인한 필요와 일치)/staff_requested_purpose(선택한 조회 목적)/general_browse(일반 조회). 어느 것도 효과·자격 확정이 아니다.
 
-선택 목록 JSON은 응답 메타데이터와 주의사항을 유지하고 선택한 자원만 남긴다. `total`은 선택 개수로 바꾸고 `exported_at`을 추가한다. 기획 담당자가 향후 받을 데이터의 초안이며 현재는 로컬 파일만 생성한다.
+화면의 ‘프로그램 기획 요청 준비’는 아래 `planning-request-0.1` JSON을 내려받는다. 기존 선택 목록 내려받기를 대체하며, 현재는 로컬 파일만 생성한다.
 화면은 조회 중 중복 요청을 막고, 실패를 빈 결과와 구분하며, 재조회 시 이전 선택을 제거한다. 결과는 HTML 문자열로 실행하지 않도록 이스케이프한다.
 
 ## 위험도 입력 계약 초안
@@ -224,3 +236,42 @@ Gemini 2.5 Flash·Flash-Lite는 신규 프로젝트에서 제공 중단(404)이 
 2026-10-17 연결 점검: Tavily 호출 없이 Gemini에 짧은 확인 요청을 1회 보내 HTTP 200/STOP을 받았다. 이는 키·모델의 현재 응답 확인이며 전체 추천 요청의 성공·안정성 보장은 아니다. 503 시 검색 캐시 재사용과 대기 후 수동 재시도는 가짜 응답으로 검증했다.
 
 실제 조회의 초기 검증 결과와 미해결 항목은 [복지 추천 검증 기록](welfare_agent_validation.md)을 참고한다. 후보 제외 사유는 exclusion_counts에 출처·지역·연령·지원 목적·종료·중복별 건수로 기록한다. 추적용 tms.bokjiro.go.kr 링크는 서비스 원문으로 사용하지 않는다.
+
+## 공통 그래프 연결 입력 (2026-10-20)
+
+기존 요청에 선택적으로 analysis_context를 추가한다. 형식은 {schema_version: welfare-context-0.1, profile: TargetProfile, causes: CauseHypothesis[]}이다. 구조화된 근거 수치·단위와 원인 가설을 설명문으로 축약하지 않고 전달한다. 기존 risk-input-0.1은 그대로 유지하며 두 입력의 지역·연령·판정 상태·기간·신호·버전·제한·예시 여부를 교차 검증한다. 원인 가설은 실제 근거 id를 참조해야 하며 미연결·보류·불완전 판정에서 확정된 원인처럼 전달하지 않는다.
+
+분석 맥락은 검색어에 포함하지 않고 Gemini 판단에만 전달한다. 구조화 데이터의 공유 가능 여부는 입력 담당자가 확인하며 원본 파일을 자동 전송하지 않는다. 노드 연결에서는 예시 입력 표시를 보존한다. 기존 화면의 위험도 직접 입력은 계속 동작하지만, 공통 프로필 자동 수신·통합 API·새 화면을 추가한 것은 아니다.
+
+기획 쪽에는 추천 이유·신청 조건·자료 연도·주의사항과 전체 응답을 함께 보존한다. 자세한 연결 규칙과 호출 수 계측은 [AI 흐름 안내](ai_pipeline.md#복지-추천-연결부-보완-2026-10-20)를 참고한다.
+
+공통 그래프와 추천 API의 복지 결과에는 `response_routing`도 포함한다. 기존 후보가 있으면 자원 연계와 예방·신규 기획을 함께 검토할 수 있다. 정상 조회의 후보 0개와 검색 실패를 구분하고, 둘 다 예방 기획 검토는 가능하지만 실제 자원 부족이나 예방 효과가 확인된 것으로 해석하지 않는다. 각 경로에 사유·관련 자원 id·추가 확인 사항을 전달한다. 화면에서는 기획 요청 준비 영역에 상태를 간단히 표시하고 확인 사항을 접어둔다. 검색 실패는 HTTP 오류 상태를 유지하고 `candidate_status: unavailable`을 전달하며, 잘못된 요청(400)에는 기획 경로를 붙이지 않는다. 화면 표시를 위한 추가 검색·LLM 호출은 없다. 실제 기획 Agent 전송·기획서 생성은 후속 작업이다.
+
+## 기획 요청 파일 초안 (planning-request-0.1)
+
+사용 순서: 복지자원 조회 → 기존 자원 활용 시 자원 선택(예방·신규 기획은 선택 불필요) → 담당자 요청 작성(선택, 최대 2,000자) → 기획 요청 만들기 → 전달 데이터 미리보기 → JSON 내려받기. 기획서 생성이나 평가가 아니라 팀원의 기획 Agent에 전달할 입력을 준비하는 단계다.
+
+| 필드 | 의미 |
+| --- | --- |
+| schema_version | `planning-request-0.1`. 기획 담당자와 합의 전인 초안 |
+| request_id / created_at | 요청별 UUID / 준비 시각(UTC ISO 형식) |
+| planning_type | `existing_resource_based`(선택 자원 활용) / `preventive_new`(예방·신규 기획) |
+| target | 마지막 조회의 지역·연령·지원 목적. 현재 폼의 미조회 값과 섞지 않음 |
+| officer_prompt | 담당자가 작성한 기획 조건. 앞뒤 공백 제거, 미작성 시 빈 문자열 |
+| confirmed_support_needs | 조회 때 담당자가 선택한 지원 필요 |
+| risk_assessment | 조회 때 전달한 위험도 결과 원문, 미연결은 null. 위험 단계를 변경하지 않음 |
+| analysis_context | 추천 응답의 공통 분석 맥락(근거·원인 가설 포함), 미연결은 null |
+| has_example_context | 가상 위험도·분석 입력 여부. 저장 자료 모드 여부와 별개 |
+| selected_resources | 담당자가 선택한 자원의 전체 필드와 출처. 기존 자원 활용은 1개 이상 필요, 예방·신규는 빈 배열 허용 |
+| welfare_lookup.mode | live / offline. 저장 자료 테스트를 실제 실시간 조회로 바꾸지 않음 |
+| welfare_lookup.status | completed / unavailable. 후자는 조회 실패이며 기존 자원 유무 미확정 |
+| welfare_lookup.candidate_status | candidates_found / no_candidates_found / unavailable |
+| welfare_lookup.total_candidates | 정상 조회의 전체 후보 수. 정상 0개는 0, 조회 실패는 null |
+| welfare_lookup.error | 조회 실패 설명, 정상 조회는 null |
+| welfare_lookup.response_routing | 전체 조회에 대한 대응 사유·확인 사항. 선택 자원에 한정한 판정이 아님 |
+| welfare_lookup.recommendation_snapshot | 전체 추천 응답 복사본(전체 후보·검색·출처·제외·검토·주의사항 포함). 조회 실패는 null |
+| notes | 요청 초안·자원 부재 미확정·위험 단계 및 효과 해석 관련 공통 주의사항 |
+
+예방·신규 기획에서도 자원을 선택했다면 참고 자원으로 함께 전달한다. `selected_resources`가 실제 선택 범위이며, `recommendation_snapshot.resources`는 선택하지 않은 후보를 포함한 전체 조회 근거다. 기획 담당자는 둘을 구분해서 사용한다.
+
+조회 실패에서도 서버가 입력 검증을 통과한 응답에 대응 경로를 붙였을 때 예방 기획 초안 요청을 허용한다. 잘못된 입력이나 통신 실패 등으로 입력 검증을 확인할 수 없는 경우에는 비활성화한다. 기획 Agent는 unavailable을 확정 자원 부족으로 해석하지 않아야 한다. 담당자 요청·선택을 수정하면 미리보기와 다운로드를 해제해 이전 파일을 실수로 내보내지 않게 한다. 재조회는 선택·요청을 초기화한다. 이 형식은 공통 그래프의 `ProgramPlan`(완성 기획안)과 별개이며 현재 그래프 입력으로 자동 변환하지 않는다.

@@ -59,6 +59,31 @@ class PipelineFlowTests(unittest.TestCase):
         self.assertEqual(len(nodes_run(state, "trend_search")), 1)
         self.assertEqual(len(nodes_run(state, "gap_analysis")), 1)  # 두 갈래가 모두 끝난 뒤 한 번만
 
+    def test_welfare_receives_graph_causes_and_keeps_context_for_planning(self):
+        seen = {}
+        def gaps(ctx, planning):
+            seen["context"] = planning.existing.recommendation["analysis_context"]
+            seen["resource"] = planning.existing.resources[0]
+            seen["routes"] = planning.existing.response_routing
+            return stubs.analyze_gaps(ctx, planning)
+        state = self.run_with(analyze_gaps=gaps)
+        self.assertEqual(seen["context"]["profile"], PROFILE.model_dump(mode="json"))
+        self.assertEqual(seen["context"]["causes"], [c.model_dump(mode="json") for c in state["causes"]])
+        self.assertTrue(seen["resource"].description)
+        self.assertTrue(seen["resource"].eligibility)
+        self.assertTrue(seen["resource"].source)
+        self.assertEqual(nodes_run(state, "welfare_recommend")[0].external_calls, {})
+        self.assertIn("preventive_planning", [r.route for r in seen["routes"].routes])
+
+    def test_unexpected_welfare_error_preserves_preventive_planning_option(self):
+        def broken(ctx, profile):
+            raise RuntimeError("가짜 노드 오류")
+        state = self.run_with(recommend_existing=broken)
+        routing = state["existing_resources"].response_routing
+        self.assertEqual(routing.candidate_status, "unavailable")
+        self.assertEqual({r.route for r in routing.routes}, {"preventive_planning", "further_review"})
+        self.assertEqual(state["report"].status, "completed")
+
     def test_replan_once_then_compare(self):
         state = self.run_with()  # 가짜 평가: 2번 원안 54점 → 재기획 66점
         self.assertEqual(state["revision_count"], 1)
