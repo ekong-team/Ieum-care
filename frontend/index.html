@@ -69,11 +69,18 @@
           <p id="result-description" class="muted"></p>
           <section id="review-context" class="panel review-context" aria-label="추천 판단과 추가 확인 사항" aria-live="polite" hidden></section>
           <div id="results" class="resource-list" aria-live="polite"></div>
-          <section id="response-routes" class="panel response-routes" aria-label="추천 이후 검토할 대응" aria-live="polite" hidden></section>
           <section class="handoff panel" aria-labelledby="handoff-title">
-            <div class="handoff-heading"><span class="handoff-icon" aria-hidden="true">↗</span><div><h2 id="handoff-title">다음 기획으로 이어가기</h2><p>검토할 자원을 선택해 프로그램 기획 담당자에게 전달할 목록을 준비하세요.</p></div></div>
+            <div class="handoff-heading"><span class="handoff-icon" aria-hidden="true">↗</span><div><h2 id="handoff-title">프로그램 기획 요청 준비</h2><p>기존 자원을 활용하거나, 자원 선택 없이 예방·신규 프로그램의 기획을 요청할 수 있습니다.</p></div></div>
+            <p id="planning-target" class="planning-target">먼저 대상 집단의 복지자원을 조회해주세요.</p>
+            <div id="response-routes" class="planning-lookup" aria-label="조회 상태와 기획 참고 사항" aria-live="polite" hidden></div>
             <div id="selected-resources" class="selected-resources" aria-live="polite"></div>
-            <div class="handoff-bottom"><small>기획 Agent 연동 전 · 실제 전송은 하지 않습니다.</small><button id="download-selection" class="secondary" disabled>선택 목록 내려받기 <span aria-hidden="true">↓</span></button></div>
+            <label for="planning-prompt">기획 담당자에게 전달할 요청 (선택)</label>
+            <textarea id="planning-prompt" rows="4" maxlength="2000" placeholder="예: 혼자 사는 어르신이 주 1회 이웃과 만날 수 있는 프로그램을 기획해주세요. 이동 부담이 적고 소규모로 운영하면 좋겠습니다." aria-describedby="planning-prompt-help"></textarea>
+            <p id="planning-prompt-help" class="muted">최대 2,000자. 원하는 활동·운영 방식·예산 등의 조건을 적어주세요.</p>
+            <div class="planning-actions"><button id="prepare-existing" class="secondary" type="button" disabled>선택 자원 활용 기획 요청 만들기</button><button id="prepare-preventive" class="primary" type="button" disabled>예방·신규 기획 요청 만들기</button></div>
+            <p id="planning-status" class="muted" role="status">조회 후 요청을 준비할 수 있습니다.</p>
+            <div id="planning-preview" hidden><p id="planning-summary"></p><details><summary>전달 데이터 보기</summary><pre id="planning-json"></pre></details></div>
+            <div class="handoff-bottom"><small>기획 Agent 연결 전 · JSON 파일을 팀원에게 전달하세요. 기획서 생성·자동 전송은 아직 지원하지 않습니다.</small><button id="download-planning" class="secondary" type="button" disabled>기획 요청 JSON 내려받기 <span aria-hidden="true">↓</span></button></div>
           </section>
         </div>
       </div>

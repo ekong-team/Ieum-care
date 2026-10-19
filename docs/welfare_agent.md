@@ -118,7 +118,7 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 - `warnings`: 과거 안내 가능성·현재 운영 미확인·자격/순위 미판정·미연동에 관한 주의사항.
 - live의 support_basis는 llm_analysis_match다. offline은 staff_confirmed_need(담당자가 확인한 필요와 일치)/staff_requested_purpose(선택한 조회 목적)/general_browse(일반 조회). 어느 것도 효과·자격 확정이 아니다.
 
-선택 목록 JSON은 응답 메타데이터와 주의사항을 유지하고 선택한 자원만 남긴다. `total`은 선택 개수로 바꾸고 `exported_at`을 추가한다. 기획 담당자가 향후 받을 데이터의 초안이며 현재는 로컬 파일만 생성한다.
+화면의 ‘프로그램 기획 요청 준비’는 아래 `planning-request-0.1` JSON을 내려받는다. 기존 선택 목록 내려받기를 대체하며, 현재는 로컬 파일만 생성한다.
 화면은 조회 중 중복 요청을 막고, 실패를 빈 결과와 구분하며, 재조회 시 이전 선택을 제거한다. 결과는 HTML 문자열로 실행하지 않도록 이스케이프한다.
 
 ## 위험도 입력 계약 초안
@@ -245,4 +245,33 @@ Gemini 2.5 Flash·Flash-Lite는 신규 프로젝트에서 제공 중단(404)이 
 
 기획 쪽에는 추천 이유·신청 조건·자료 연도·주의사항과 전체 응답을 함께 보존한다. 자세한 연결 규칙과 호출 수 계측은 [AI 흐름 안내](ai_pipeline.md#복지-추천-연결부-보완-2026-10-20)를 참고한다.
 
-공통 그래프와 추천 API의 복지 결과에는 `response_routing`도 포함한다. 기존 후보가 있으면 자원 연계와 예방·신규 기획을 함께 검토할 수 있다. 정상 조회의 후보 0개와 검색 실패를 구분하고, 둘 다 예방 기획 검토는 가능하지만 실제 자원 부족이나 예방 효과가 확인된 것으로 해석하지 않는다. 각 경로에 사유·관련 자원 id·추가 확인 사항을 전달한다. 추천 화면의 ‘다음 대응 검토’에서 경로를 표시하며 선택 목록 JSON에도 포함한다. 내보낼 때 관련 자원 id는 선택한 자원으로 한정한다. 검색 실패는 HTTP 오류 상태를 유지하고 `candidate_status: unavailable`을 전달하며, 잘못된 요청(400)에는 기획 경로를 붙이지 않는다. 화면 표시를 위한 추가 검색·LLM 호출은 없다. 실제 기획 Agent 전송·기획서 생성은 후속 작업이다.
+공통 그래프와 추천 API의 복지 결과에는 `response_routing`도 포함한다. 기존 후보가 있으면 자원 연계와 예방·신규 기획을 함께 검토할 수 있다. 정상 조회의 후보 0개와 검색 실패를 구분하고, 둘 다 예방 기획 검토는 가능하지만 실제 자원 부족이나 예방 효과가 확인된 것으로 해석하지 않는다. 각 경로에 사유·관련 자원 id·추가 확인 사항을 전달한다. 화면에서는 기획 요청 준비 영역에 상태를 간단히 표시하고 확인 사항을 접어둔다. 검색 실패는 HTTP 오류 상태를 유지하고 `candidate_status: unavailable`을 전달하며, 잘못된 요청(400)에는 기획 경로를 붙이지 않는다. 화면 표시를 위한 추가 검색·LLM 호출은 없다. 실제 기획 Agent 전송·기획서 생성은 후속 작업이다.
+
+## 기획 요청 파일 초안 (planning-request-0.1)
+
+사용 순서: 복지자원 조회 → 기존 자원 활용 시 자원 선택(예방·신규 기획은 선택 불필요) → 담당자 요청 작성(선택, 최대 2,000자) → 기획 요청 만들기 → 전달 데이터 미리보기 → JSON 내려받기. 기획서 생성이나 평가가 아니라 팀원의 기획 Agent에 전달할 입력을 준비하는 단계다.
+
+| 필드 | 의미 |
+| --- | --- |
+| schema_version | `planning-request-0.1`. 기획 담당자와 합의 전인 초안 |
+| request_id / created_at | 요청별 UUID / 준비 시각(UTC ISO 형식) |
+| planning_type | `existing_resource_based`(선택 자원 활용) / `preventive_new`(예방·신규 기획) |
+| target | 마지막 조회의 지역·연령·지원 목적. 현재 폼의 미조회 값과 섞지 않음 |
+| officer_prompt | 담당자가 작성한 기획 조건. 앞뒤 공백 제거, 미작성 시 빈 문자열 |
+| confirmed_support_needs | 조회 때 담당자가 선택한 지원 필요 |
+| risk_assessment | 조회 때 전달한 위험도 결과 원문, 미연결은 null. 위험 단계를 변경하지 않음 |
+| analysis_context | 추천 응답의 공통 분석 맥락(근거·원인 가설 포함), 미연결은 null |
+| has_example_context | 가상 위험도·분석 입력 여부. 저장 자료 모드 여부와 별개 |
+| selected_resources | 담당자가 선택한 자원의 전체 필드와 출처. 기존 자원 활용은 1개 이상 필요, 예방·신규는 빈 배열 허용 |
+| welfare_lookup.mode | live / offline. 저장 자료 테스트를 실제 실시간 조회로 바꾸지 않음 |
+| welfare_lookup.status | completed / unavailable. 후자는 조회 실패이며 기존 자원 유무 미확정 |
+| welfare_lookup.candidate_status | candidates_found / no_candidates_found / unavailable |
+| welfare_lookup.total_candidates | 정상 조회의 전체 후보 수. 정상 0개는 0, 조회 실패는 null |
+| welfare_lookup.error | 조회 실패 설명, 정상 조회는 null |
+| welfare_lookup.response_routing | 전체 조회에 대한 대응 사유·확인 사항. 선택 자원에 한정한 판정이 아님 |
+| welfare_lookup.recommendation_snapshot | 전체 추천 응답 복사본(전체 후보·검색·출처·제외·검토·주의사항 포함). 조회 실패는 null |
+| notes | 요청 초안·자원 부재 미확정·위험 단계 및 효과 해석 관련 공통 주의사항 |
+
+예방·신규 기획에서도 자원을 선택했다면 참고 자원으로 함께 전달한다. `selected_resources`가 실제 선택 범위이며, `recommendation_snapshot.resources`는 선택하지 않은 후보를 포함한 전체 조회 근거다. 기획 담당자는 둘을 구분해서 사용한다.
+
+조회 실패에서도 서버가 입력 검증을 통과한 응답에 대응 경로를 붙였을 때 예방 기획 초안 요청을 허용한다. 잘못된 입력이나 통신 실패 등으로 입력 검증을 확인할 수 없는 경우에는 비활성화한다. 기획 Agent는 unavailable을 확정 자원 부족으로 해석하지 않아야 한다. 담당자 요청·선택을 수정하면 미리보기와 다운로드를 해제해 이전 파일을 실수로 내보내지 않게 한다. 재조회는 선택·요청을 초기화한다. 이 형식은 공통 그래프의 `ProgramPlan`(완성 기획안)과 별개이며 현재 그래프 입력으로 자동 변환하지 않는다.
