@@ -59,6 +59,23 @@ class ExistingResource(Strict):
     source: dict[str, Any] = Field(default_factory=dict)
 
 
+class ResponseRoute(Strict):
+    """배타적인 분기가 아닌, 담당자가 함께 검토할 수 있는 대응 선택지."""
+
+    route: Literal["existing_resource_linkage", "preventive_planning", "further_review"]
+    title: str
+    reason: str
+    resource_ids: list[str] = Field(default_factory=list)
+    checks: list[str] = Field(default_factory=list)
+
+
+class ResponseRouting(Strict):
+    schema_version: Literal["response-routing-0.1"] = "response-routing-0.1"
+    candidate_status: Literal["candidates_found", "no_candidates_found", "unavailable"]
+    routes: list[ResponseRoute]
+    notes: list[str] = Field(default_factory=list)
+
+
 class ExistingResources(Strict):
     status: Literal["available", "unavailable"]
     reason: Optional[str] = Field(default=None, description="unavailable일 때 이유")
@@ -68,6 +85,7 @@ class ExistingResources(Strict):
     review: dict[str, Any] = Field(default_factory=dict)
     has_example_context: bool = False
     recommendation: Optional[dict[str, Any]] = Field(default=None, description="검색·검증 메타데이터를 포함한 추천 응답 스냅샷")
+    response_routing: Optional[ResponseRouting] = None
 
 
 class TrendReference(Strict):

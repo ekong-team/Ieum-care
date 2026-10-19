@@ -172,6 +172,51 @@ class WelfareNodeTests(unittest.TestCase):
         self.assertTrue(result.has_example_context)
         self.assertEqual(result.recommendation["analysis_context"]["profile"]["evidence"][0]["value"], -0.083)
 
+    def test_existing_linkage_and_preventive_planning_are_both_offered(self):
+        result = recommend_existing(NodeContext("test", "offline"), self.profile)
+        routing = result.response_routing
+        routes = {route.route: route for route in routing.routes}
+        self.assertEqual(routing.candidate_status, "candidates_found")
+        self.assertEqual(set(routes), {"existing_resource_linkage", "preventive_planning", "further_review"})
+        self.assertEqual(routes["existing_resource_linkage"].resource_ids, [r.id for r in result.resources])
+        self.assertTrue(routes["preventive_planning"].checks)
+        self.assertTrue(routing.notes)
+
+    def test_no_candidates_allows_preventive_planning_without_claiming_absence(self):
+        before = self.profile.model_dump(mode="json")
+        result = recommend_existing(NodeContext("test", "live"), self.profile,
+                                    live_call=lambda p: {"resources": [], "coverage": {"status": "no_grounded_candidates"}})
+        routing = result.response_routing
+        routes = {route.route: route for route in routing.routes}
+        self.assertEqual(routing.candidate_status, "no_candidates_found")
+        self.assertEqual(set(routes), {"preventive_planning", "further_review"})
+        self.assertIn("이번 조회", routes["preventive_planning"].reason)
+        self.assertIn("자원 부재를 뜻하지", routes["further_review"].reason)
+        self.assertEqual(self.profile.model_dump(mode="json"), before)
+
+    def test_search_failure_still_allows_planning_draft_with_different_reason(self):
+        def fail(payload):
+            raise AgentError("검색 한도", 429)
+        result = recommend_existing(NodeContext("test", "live"), self.profile, live_call=fail)
+        routing = result.response_routing
+        routes = {route.route: route for route in routing.routes}
+        self.assertEqual(routing.candidate_status, "unavailable")
+        self.assertEqual(set(routes), {"preventive_planning", "further_review"})
+        self.assertIn("완료되지 않았지만", routes["preventive_planning"].reason)
+        self.assertIsNone(result.recommendation)
+        self.assertTrue(result.has_example_context)
+
+    def test_response_routes_do_not_depend_on_or_change_risk_level(self):
+        def route_at(level):
+            data = profile_data()
+            data["risk"]["level"] = level
+            profile = TargetProfile.model_validate(data)
+            result = recommend_existing(NodeContext("test", "live"), profile,
+                                        live_call=lambda p: {"resources": []})
+            self.assertEqual(result.recommendation["analysis_context"]["profile"]["risk"]["level"], level)
+            return result.response_routing.model_dump()
+        self.assertEqual(route_at(1), route_at(5))
+
 
 class WelfareCallAccountingTests(unittest.TestCase):
     def setUp(self):

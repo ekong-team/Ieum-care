@@ -9,7 +9,8 @@ from copy import deepcopy
 import hashlib
 import json
 
-from ai.contracts import SIGNAL_LABELS, ExistingResource, ExistingResources, TargetProfile, CauseHypothesis, WelfareAnalysisContext
+from ai.contracts import (SIGNAL_LABELS, ExistingResource, ExistingResources, TargetProfile, CauseHypothesis,
+                          WelfareAnalysisContext, ResponseRoute, ResponseRouting)
 from ai.nodes.context import NodeContext
 from ai.welfare_agent.live_agent import AgentError, recommend_live
 from ai.welfare_agent.recommender import recommend, validate_request
@@ -53,6 +54,41 @@ def to_welfare_payload(profile: TargetProfile, run_id: str, *, causes: list[Caus
     return payload, warnings
 
 
+def attach_response_routes(existing: ExistingResources) -> ExistingResources:
+    """추천 결과로 대응 선택지만 만든다. 위험도·우선순위·실제 자원 공백은 판정하지 않는다."""
+    found = existing.status == "available" and bool(existing.resources)
+    candidate_status = ("unavailable" if existing.status == "unavailable" else
+                        "candidates_found" if found else "no_candidates_found")
+    ids = [resource.id for resource in existing.resources] if found else []
+    routes = []
+    if found:
+        routes.append(ResponseRoute(
+            route="existing_resource_linkage", title="기존 자원 연계 검토", resource_ids=ids,
+            reason="이번 조회에서 검토할 기존 자원 후보를 확보했습니다.",
+            checks=["개인 신청 자격·참여 의사·현재 운영·모집 여부를 기관과 확인하세요."]))
+    planning_reason = (
+        "기존 후보와 함께 예방·관계 형성 또는 기존 서비스를 보완하는 새 프로그램을 검토할 수 있습니다."
+        if found else "이번 조회에서 적절한 후보를 확보하지 못해 예방·관계 형성 프로그램 기획을 검토할 수 있습니다."
+        if candidate_status == "no_candidates_found" else
+        "기존 자원 확인이 완료되지 않았지만, 예방·관계 형성을 위한 기획 초안을 검토할 수 있습니다.")
+    routes.append(ResponseRoute(
+        route="preventive_planning", title="예방·신규 프로그램 기획 검토", resource_ids=ids,
+        reason=planning_reason,
+        checks=["기존 자원과의 중복·보완 관계와 참여 수요를 확인하세요.",
+                "근거 확인 전에는 확정된 자원 부족이나 예방 효과로 제시하지 마세요."]))
+    review_reason = ("후보의 자격·최신성·지역 제공 여부를 확인해야 합니다." if found else
+                     "추천 0개가 실제 지역의 자원 부재를 뜻하지 않으므로 검색 범위와 제외 사유를 확인해야 합니다."
+                     if candidate_status == "no_candidates_found" else
+                     "검색·추천 실행이 완료되지 않아 기존 자원의 유무와 제공 조건은 아직 판단할 수 없습니다.")
+    routes.append(ResponseRoute(
+        route="further_review", title="추가 확인", reason=review_reason,
+        checks=["검색 실패·근거 부족·조건 불일치와 실제 자원 부족을 구분하세요."]))
+    routing = ResponseRouting(candidate_status=candidate_status, routes=routes,
+                              notes=["대응 경로는 함께 검토할 수 있으며 자동 연계·기획 실행을 뜻하지 않습니다.",
+                                     "추천 건수로 위험 단계를 높이거나 낮추지 않습니다. 지원 긴급성은 별도로 판단합니다."])
+    return existing.model_copy(update={"response_routing": routing})
+
+
 def to_existing_resources(result: dict, warnings: list[str]) -> ExistingResources:
     """복지 추천 응답에서 기획·공백 분석에 필요한 필드만 옮긴다."""
     resources = []
@@ -63,11 +99,11 @@ def to_existing_resources(result: dict, warnings: list[str]) -> ExistingResource
         fields.update(id=str(item.get("id", "")), name=str(item.get("name", "")),
                       purpose=str(item.get("purpose", "")), source_url=source.get("url"))
         resources.append(ExistingResource.model_validate(fields))
-    return ExistingResources(status="available", resources=resources,
+    return attach_response_routes(ExistingResources(status="available", resources=resources,
                              warnings=warnings + [str(text) for text in result.get("warnings", [])],
                              coverage=deepcopy(result.get("coverage", {})), review=deepcopy(result.get("review", {})),
                              has_example_context=result.get("has_example_context", False),
-                             recommendation=deepcopy(result))
+                             recommendation=deepcopy(result)))
 
 
 def recommend_existing(ctx: NodeContext, profile: TargetProfile, *, live_call=None, offline_call=None) -> ExistingResources:
@@ -88,9 +124,9 @@ def recommend_existing(ctx: NodeContext, profile: TargetProfile, *, live_call=No
                   "has_example_context": bool(profile.is_example or result.get("has_example_context"))}
         return to_existing_resources(result, warnings)
     except AgentError as error:
-        return ExistingResources(status="unavailable", reason=f"복지 추천 실행 실패: {error}", has_example_context=profile.is_example, warnings=warnings)
+        return attach_response_routes(ExistingResources(status="unavailable", reason=f"복지 추천 실행 실패: {error}", has_example_context=profile.is_example, warnings=warnings))
     except ValueError as error:
-        return ExistingResources(status="unavailable", reason=f"복지 추천이 지원하지 않는 입력: {error}", has_example_context=profile.is_example, warnings=warnings)
+        return attach_response_routes(ExistingResources(status="unavailable", reason=f"복지 추천이 지원하지 않는 입력: {error}", has_example_context=profile.is_example, warnings=warnings))
 
 
 def payload_preview(profile: TargetProfile, run_id: str = "preview") -> str:
