@@ -4,3 +4,7 @@ pandas==3.0.1
 shapely==2.1.2
 pyproj==3.7.2
 pyshp==2.3.1
+
+# AI 흐름 (프로그램 기획·평가 그래프). docs/system_design.md 3장
+langgraph==1.2.12
+pydantic==2.13.5
