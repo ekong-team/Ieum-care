@@ -279,6 +279,19 @@ class WelfareApiTests(unittest.TestCase):
         self.assertEqual(result["target"]["region"], "강남구")
         self.assertEqual(result["mode"], "offline")
         self.assertEqual(result["schema_version"], "welfare-0.4")
+        self.assertEqual(result["response_routing"]["candidate_status"], "candidates_found")
+        self.assertEqual([route["route"] for route in result["response_routing"]["routes"]],
+                         ["existing_resource_linkage", "preventive_planning", "further_review"])
+
+    def test_http_empty_candidates_keep_prevention_separate_from_failure(self):
+        payload = {"mode": "live", "target": {"region": "춘천시", "age_group": 60, "purpose": "all"}}
+        with patch('backend.server.recommend_live', return_value={"resources": [], "warnings": []}) as live:
+            status, content = self.request("POST", "/api/welfare/recommendations", json.dumps(payload))
+        self.assertEqual(status, 200)
+        routing = json.loads(content)["response_routing"]
+        self.assertEqual(routing["candidate_status"], "no_candidates_found")
+        self.assertEqual([route["route"] for route in routing["routes"]], ["preventive_planning", "further_review"])
+        self.assertEqual(live.call_count, 1)
 
     def test_http_live_failure_is_not_disguised_as_offline_success(self):
         payload = {"mode": "live", "target": {"region": "춘천시", "age_group": 60, "purpose": "all"}}
@@ -287,6 +300,9 @@ class WelfareApiTests(unittest.TestCase):
         self.assertEqual(status, 503)
         self.assertIn("error", json.loads(content))
         self.assertNotIn("resources", json.loads(content))
+        routing = json.loads(content)["response_routing"]
+        self.assertEqual(routing["candidate_status"], "unavailable")
+        self.assertEqual([route["route"] for route in routing["routes"]], ["preventive_planning", "further_review"])
 
     def test_status_does_not_return_api_key(self):
         status, content = self.request("GET", "/api/welfare/status")
@@ -319,6 +335,7 @@ class WelfareApiTests(unittest.TestCase):
                 status, content = self.request("POST", "/api/welfare/recommendations", body)
                 self.assertEqual(status, 400)
                 self.assertIn("error", json.loads(content))
+                self.assertNotIn("response_routing", json.loads(content))
 
     def test_http_media_path_and_size(self):
         self.assertEqual(self.request("POST", "/api/welfare/recommendations", '{}', "text/plain")[0], 415)

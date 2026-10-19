@@ -1,6 +1,7 @@
 let resources = [];
 let purposes = {};
 let recommendation = null;
+let responseRouting = null;
 let loading = false;
 let errorMessage = '';
 let requestedMode = 'live';
@@ -83,8 +84,20 @@ function renderResults() {
     </article>`).join('') : `<div class="no-results panel"><strong>근거를 갖춘 후보를 제시하지 못했습니다.</strong><p>${escape(recommendation.coverage?.message || '실제 서비스 부재를 뜻하지 않습니다. 추가 조사가 필요합니다.')}</p></div>`;
   renderSelection();
   renderReview();
+  renderResponseRoutes();
   updateRetryControls();
 
+}
+
+function renderResponseRoutes() {
+  const panel = $('#response-routes');
+  panel.hidden = loading || !responseRouting;
+  if (panel.hidden) { panel.replaceChildren(); return; }
+  const status = { candidates_found: '기존 자원 후보 확보', no_candidates_found: '이번 조회에서 후보 미확보', unavailable: '조회 미완료' };
+  panel.innerHTML = `<h2>다음 대응 검토</h2><p class="muted">${escape(status[responseRouting.candidate_status])}${recommendation?.mode === 'offline' ? ' · 저장 자료 테스트 결과' : ''} · 여러 대응을 함께 검토할 수 있습니다.</p>
+    <div class="route-options">${responseRouting.routes.map((route) => `<article><h3>${escape(route.title)}</h3><p>${escape(route.reason)}</p><ul>${route.checks.map((check) => `<li>${escape(check)}</li>`).join('')}</ul></article>`).join('')}</div>
+    <ul class="route-notes">${responseRouting.notes.map((note) => `<li>${escape(note)}</li>`).join('')}</ul>
+    <p class="muted">기획 Agent 연결 전입니다. 이 화면에서 기획서를 생성하거나 기관으로 전송하지 않습니다.</p>`;
 }
 
 function renderReview() {
@@ -125,6 +138,7 @@ async function queryResources() {
   requestedMode = $('#search-mode').value;
   loading = true;
   recommendation = null;
+  responseRouting = null;
   resources = [];
   errorMessage = '';
   selected.clear();
@@ -148,6 +162,7 @@ async function queryResources() {
     if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('추천 API 서버로 접속해주세요. 실행 방법은 frontend/README.md에 있습니다.');
     const result = await response.json();
     if (!response.ok) {
+      responseRouting = result.response_routing || null;
       if (Number.isInteger(result.retry_after_seconds) && result.retry_after_seconds > 0 && result.retry_after_seconds <= 60) {
         retryAvailableAt = Date.now() + result.retry_after_seconds * 1000;
         if (retryTimer !== null) clearInterval(retryTimer);
@@ -157,6 +172,7 @@ async function queryResources() {
     }
     if (result.schema_version !== 'welfare-0.4' || result.is_demo !== false || !result.review || !Array.isArray(result.resources)) throw new Error('지원하지 않는 추천 응답 형식입니다.');
     recommendation = result;
+    responseRouting = result.response_routing || null;
     resources = result.resources;
     purposes = result.purposes;
   } catch (error) {
@@ -218,6 +234,8 @@ $('#download-selection').addEventListener('click', () => {
   // 조건・버전・주의사항을 함께 보존하는 기획 Agent 연결용 임시 형식.
   const payload = { ...recommendation, exported_at: new Date().toISOString(),
     resources: resources.filter((item) => selected.has(item.id)), total: selected.size };
+  if (responseRouting) payload.response_routing = { ...responseRouting,
+    routes: responseRouting.routes.map((route) => ({ ...route, resource_ids: route.resource_ids.filter((id) => selected.has(id)) })) };
   const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
   const link = document.createElement('a');
   link.href = url;

@@ -13,8 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from ai.welfare_agent.recommender import recommend, validate_request  # noqa: E402
 from ai.welfare_agent.live_agent import recommend_live, config_status, AgentError  # noqa: E402
+from ai.contracts import ExistingResources  # noqa: E402
+from ai.nodes.welfare import attach_response_routes, to_existing_resources  # noqa: E402
 
 LIVE_SLOT = BoundedSemaphore(1)
+
+
+def unavailable_routing():
+    """HTTP 오류에서도 후보 0개와 조회 실패를 구분해 전달한다."""
+    return attach_response_routes(ExistingResources(status="unavailable")).response_routing.model_dump(mode="json")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -62,7 +69,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if mode == "live":
                 if not LIVE_SLOT.acquire(blocking=False):
-                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "다른 AI 추천 요청이 처리 중입니다. 잠시 후 다시 시도해주세요."})
+                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "다른 AI 추천 요청이 처리 중입니다. 잠시 후 다시 시도해주세요.", "response_routing": unavailable_routing()})
                     return
                 try:
                     result = recommend_live(payload)
@@ -71,15 +78,17 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 result = {**recommend(payload), "schema_version": "welfare-0.4", "mode": "offline"}
                 result["warnings"].insert(0, "저장된 자료의 조회 테스트입니다. 외부 검색·LLM을 실행하지 않았습니다.")
+            # 그래프와 화면이 같은 대응 기준을 사용한다. 추가 검색·LLM 호출은 없다.
+            result["response_routing"] = to_existing_resources(result, []).response_routing.model_dump(mode="json")
         except AgentError as error:
-            body = {"error": str(error)}
+            body = {"error": str(error), "response_routing": unavailable_routing()}
             if error.retry_after_seconds is not None:
                 body["retry_after_seconds"] = error.retry_after_seconds
             self.send_json(error.status, body)
             return
         except Exception:
             self.log_error("복지자원 후보 처리 중 오류가 발생했습니다.")
-            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "추천 처리에 실패했습니다. 서버 상태를 확인해주세요."})
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "추천 처리에 실패했습니다. 서버 상태를 확인해주세요.", "response_routing": unavailable_routing()})
             return
         self.send_json(HTTPStatus.OK, result)
 
