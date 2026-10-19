@@ -3,12 +3,33 @@
 import operator
 from typing import Annotated, Any, Literal, Optional, TypedDict
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from ai.contracts.causes import CauseCode, CauseHypothesis
 from ai.contracts.evaluation import PlanEvaluation
 from ai.contracts.plan import ProgramPlan
 from ai.contracts.profile import Strict, TargetProfile
+
+
+class WelfareAnalysisContext(Strict):
+    """복지 추천에 전달할 수치·출처·원인 가설. 검색어에는 포함하지 않는다."""
+
+    schema_version: Literal["welfare-context-0.1"] = "welfare-context-0.1"
+    profile: TargetProfile
+    causes: list[CauseHypothesis] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_causes(self):
+        evidence_ids = set(self.profile.evidence_by_id())
+        codes = [cause.code for cause in self.causes]
+        if len(codes) != len(set(codes)):
+            raise ValueError("원인 가설 코드가 중복되었습니다.")
+        for cause in self.causes:
+            if not set(cause.evidence_ids) <= evidence_ids:
+                raise ValueError("원인 가설이 프로필에 없는 근거를 참조합니다.")
+            if (self.profile.risk is None or self.profile.risk.status != "complete") and cause.code != "C0_unknown":
+                raise ValueError("위험도 미연결·보류·불완전 상태에서는 원인 미확정만 전달합니다.")
+        return self
 
 
 class ExistingResource(Strict):
@@ -20,6 +41,22 @@ class ExistingResource(Strict):
     format: str = ""
     age_match: str = "unknown"
     source_url: Optional[str] = None
+    region: str = ""
+    organization: str = ""
+    description: str = ""
+    eligibility: str = ""
+    schedule: str = ""
+    application_method: str = ""
+    application_url: Optional[str] = None
+    age_ranges: list[dict[str, Optional[int]]] = Field(default_factory=list)
+    reason: str = ""
+    check: str = ""
+    match_reasons: list[str] = Field(default_factory=list)
+    isolation_relevance: Optional[Literal["direct", "indirect", "uncertain"]] = None
+    relevance_reason: str = ""
+    eligibility_status: str = "needs_confirmation"
+    availability_status: str = "needs_confirmation"
+    source: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExistingResources(Strict):
@@ -27,6 +64,10 @@ class ExistingResources(Strict):
     reason: Optional[str] = Field(default=None, description="unavailable일 때 이유")
     resources: list[ExistingResource] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    coverage: dict[str, Any] = Field(default_factory=dict)
+    review: dict[str, Any] = Field(default_factory=dict)
+    has_example_context: bool = False
+    recommendation: Optional[dict[str, Any]] = Field(default=None, description="검색·검증 메타데이터를 포함한 추천 응답 스냅샷")
 
 
 class TrendReference(Strict):

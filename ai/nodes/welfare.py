@@ -1,27 +1,33 @@
-"""④-A 기존 복지자원 추천 노드. 장현지 님의 복지 추천 Agent를 수정하지 않고 감싸서 쓴다.
+"""④-A 기존 복지자원 추천 노드. 기존 복지 추천 Agent를 공통 프로필·기획 입력에 연결한다.
 
-1. 대상 프로필 → 복지 추천 요청(risk-input-0.1 포함)으로 변환 (설계 문서 5.1 변환표)
+1. 대상 프로필·원인 가설 → 기존 위험도 요청 + 선택적 분석 맥락으로 변환
 2. live면 recommend_live(), offline이면 저장 자료 recommend() 호출
 3. 실패하거나 지원하지 않는 지역이어도 그래프를 멈추지 않고 unavailable로 돌려준다 (설계 문서 4.1)
 """
 
+from copy import deepcopy
 import hashlib
 import json
 
-from ai.contracts import SIGNAL_LABELS, ExistingResource, ExistingResources, TargetProfile
+from ai.contracts import SIGNAL_LABELS, ExistingResource, ExistingResources, TargetProfile, CauseHypothesis, WelfareAnalysisContext
 from ai.nodes.context import NodeContext
 from ai.welfare_agent.live_agent import AgentError, recommend_live
 from ai.welfare_agent.recommender import recommend, validate_request
 
 
-def to_welfare_payload(profile: TargetProfile, run_id: str) -> tuple[dict, list[str]]:
+def to_welfare_payload(profile: TargetProfile, run_id: str, *, causes: list[CauseHypothesis] | None = None) -> tuple[dict, list[str]]:
     """대상 프로필을 복지 추천 Agent의 요청 형식으로 바꾼다. (요청, 경고 목록)을 돌려준다."""
     warnings = []
     target = profile.target
     if target.sex != "all":
-        warnings.append("복지 추천은 성별 구분 없이 조회합니다. 성별 조건은 담당자가 확인하세요.")
+        warnings.append("외부 검색은 성별 구분 없이 조회합니다. 성별은 분석 맥락으로만 전달하며 실제 자격 조건은 담당자가 확인하세요.")
     payload = {"target": {"region": target.region, "age_group": target.age_group, "purpose": "all"},
                "confirmed_support_needs": []}
+    try:
+        context = WelfareAnalysisContext(profile=profile, causes=causes or [])
+    except ValueError:
+        raise ValueError("복지 추천에 전달할 원인 가설의 상태·근거 참조가 올바르지 않습니다.") from None
+    payload["analysis_context"] = context.model_dump(mode="json")
     if profile.risk is None:
         return payload, warnings
 
@@ -52,33 +58,39 @@ def to_existing_resources(result: dict, warnings: list[str]) -> ExistingResource
     resources = []
     for item in result.get("resources", []):
         source = item.get("source") or {}
-        resources.append(ExistingResource(
-            id=str(item.get("id", "")), name=str(item.get("name", "")), purpose=str(item.get("purpose", "")),
-            format=str(item.get("format", "")), age_match=str(item.get("age_match", "unknown")),
-            source_url=source.get("url")))
+        # 기획에서 바로 쓰는 항목은 공통 모델로, 전체 응답은 스냅샷으로 함께 보존한다.
+        fields = {key: deepcopy(value) for key, value in item.items() if key in ExistingResource.model_fields}
+        fields.update(id=str(item.get("id", "")), name=str(item.get("name", "")),
+                      purpose=str(item.get("purpose", "")), source_url=source.get("url"))
+        resources.append(ExistingResource.model_validate(fields))
     return ExistingResources(status="available", resources=resources,
-                             warnings=warnings + [str(text) for text in result.get("warnings", [])][:10])
+                             warnings=warnings + [str(text) for text in result.get("warnings", [])],
+                             coverage=deepcopy(result.get("coverage", {})), review=deepcopy(result.get("review", {})),
+                             has_example_context=result.get("has_example_context", False),
+                             recommendation=deepcopy(result))
 
 
 def recommend_existing(ctx: NodeContext, profile: TargetProfile, *, live_call=None, offline_call=None) -> ExistingResources:
     """노드 본체. live_call·offline_call은 테스트에서 가짜 함수로 바꿔 끼우기 위한 자리다."""
-    live_call = live_call or recommend_live
     offline_call = offline_call or recommend
+    warnings = []
     try:
-        payload, warnings = to_welfare_payload(profile, ctx.run_id)
+        payload, warnings = to_welfare_payload(profile, ctx.run_id, causes=ctx.cause_hypotheses)
         validate_request(payload)  # 기존 검증을 그대로 통과하는지 먼저 확인
         if ctx.mode == "live":
-            ctx.count("tavily")
-            ctx.count("gemini")
-            result = live_call(payload)
+            # 실제 HTTP 요청 직전 콜백으로 세므로 캐시·조기 실패·HTTP 오류도 구분된다.
+            result = (recommend_live(payload, on_external_call=ctx.count) if live_call is None
+                      else live_call(payload))
         else:
             result = offline_call(payload)
             warnings.append("저장된 자료 조회(offline)입니다. 외부 검색·LLM을 실행하지 않았습니다.")
+        result = {**result, "analysis_context": deepcopy(payload["analysis_context"]),
+                  "has_example_context": bool(profile.is_example or result.get("has_example_context"))}
         return to_existing_resources(result, warnings)
     except AgentError as error:
-        return ExistingResources(status="unavailable", reason=f"복지 추천 실행 실패: {error}")
+        return ExistingResources(status="unavailable", reason=f"복지 추천 실행 실패: {error}", has_example_context=profile.is_example, warnings=warnings)
     except ValueError as error:
-        return ExistingResources(status="unavailable", reason=f"복지 추천이 지원하지 않는 입력: {error}")
+        return ExistingResources(status="unavailable", reason=f"복지 추천이 지원하지 않는 입력: {error}", has_example_context=profile.is_example, warnings=warnings)
 
 
 def payload_preview(profile: TargetProfile, run_id: str = "preview") -> str:

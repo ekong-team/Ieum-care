@@ -456,3 +456,7 @@ docs/system_design.md    # 본 문서
 트렌드 검색 검색어, 공백 분석 판정, 생성 프롬프트 원칙, 근거 검증 규칙, 기획안 JSON 예시는
 v0.1 문서(`docs/program_planner_design.md`, 커밋 `ef9c2c1`)의 5~6장을 따른다.
 변경점: 입력은 `planner-input-0.1` 대신 5.1의 TargetProfile을 쓰고, 근거 수치는 `evidence`만 인용한다.
+
+## 구현 보완 기록: 복지 추천 연결 (2026-10-20)
+
+기존 코드를 재사용한다는 원칙은 유지하되, 복지 추천 함수에 선택적 analysis_context와 on_external_call을 추가했다. 공통 프로필·원인 가설과 원래 추천 응답의 정보 손실을 방지하며 기존 요청은 그대로 지원한다. ExistingResource/ExistingResources는 기본값이 있는 필드를 추가해 기존 생성 코드를 유지했다. 이전 5.1 변환표의 신호 설명만으로 전달하던 수치·단위는 이제 analysis_context.profile.evidence에도 보존한다. 호출 횟수는 welfare 노드에서 1회씩 추정하지 않고 실제 HTTP 시도 지점에서 기록한다. 상세 규칙은 docs/ai_pipeline.md의 2026-10-20 보완 기록을 따른다.

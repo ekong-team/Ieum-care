@@ -5,14 +5,17 @@
 """
 
 import copy
+import io
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 
-from ai.contracts import TargetProfile
+from ai.contracts import TargetProfile, CauseHypothesis
 from ai.nodes.context import NodeContext
-from ai.nodes.welfare import recommend_existing, to_welfare_payload
-from ai.welfare_agent.live_agent import AgentError
+from ai.nodes.welfare import recommend_existing, to_welfare_payload, to_existing_resources
+from ai.welfare_agent.live_agent import AgentError, SEARCH_CACHE
 from ai.welfare_agent.recommender import validate_request
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -58,6 +61,51 @@ class WelfareBridgeTests(unittest.TestCase):
         self.assertNotIn("sex", payload["target"])
         self.assertTrue(any("성별" in text for text in warnings))
 
+    def test_structured_evidence_and_causes_are_preserved_without_conversion(self):
+        profile = TargetProfile.model_validate(profile_data())
+        causes = [CauseHypothesis(code="C3_overall_withdrawal", evidence_ids=["E1", "E2"],
+                                  explanation="추가 확인이 필요한 예시 가설")]
+        original = profile.model_dump(mode="json")
+        payload, _ = to_welfare_payload(profile, "run", causes=causes)
+        validate_request(payload)
+        context = payload["analysis_context"]
+        self.assertEqual(context["profile"], original)
+        self.assertEqual(context["profile"]["evidence"][0]["value"], -0.083)
+        self.assertEqual(context["profile"]["evidence"][0]["unit"], "ratio")
+        self.assertEqual(context["causes"][0]["evidence_ids"], ["E1", "E2"])
+        self.assertEqual(context["causes"][0]["basis"], "hypothesis")
+        context["profile"]["evidence"][0]["value"] = 999
+        self.assertEqual(profile.model_dump(mode="json"), original)
+
+    def test_invalid_cause_references_and_held_causal_claims_are_rejected(self):
+        profile = TargetProfile.model_validate(profile_data())
+        with self.assertRaises(ValueError):
+            to_welfare_payload(profile, "run", causes=[CauseHypothesis(code="C1_mobility", evidence_ids=["E99"])])
+        data = profile_data()
+        data["risk"] = {"level": None, "status": "held"}
+        with self.assertRaises(ValueError):
+            to_welfare_payload(TargetProfile.model_validate(data), "run", causes=[CauseHypothesis(code="C1_mobility")])
+
+    def test_contradictory_context_is_rejected(self):
+        payload, _ = self.convert(profile_data())
+        for changes in ({"period": "2025-11"}, {"risk": None},
+                        {"target": {"region": "강남구", "age_group": 20}},
+                        {"is_example": False}, {"signals": []},
+                        {"limitations": []}):
+            modified = copy.deepcopy(payload)
+            modified["analysis_context"]["profile"].update(changes)
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                validate_request(modified)
+
+    def test_missing_risk_keeps_observations_and_only_unknown_cause(self):
+        data = profile_data()
+        data["risk"] = None
+        payload, _ = to_welfare_payload(TargetProfile.model_validate(data), "run",
+                                        causes=[CauseHypothesis(code="C0_unknown")])
+        validate_request(payload)
+        self.assertNotIn("risk_assessment", payload)
+        self.assertEqual(len(payload["analysis_context"]["profile"]["evidence"]), 2)
+
 
 class WelfareNodeTests(unittest.TestCase):
     def setUp(self):
@@ -88,7 +136,95 @@ class WelfareNodeTests(unittest.TestCase):
         ctx = NodeContext(run_id="run-test", mode="live")
         result = recommend_existing(ctx, self.profile, live_call=fake_call)
         self.assertEqual(result.resources[0].id, "r1")
-        self.assertEqual(ctx.calls["gemini"], 1)
+        self.assertEqual(sum(ctx.calls.values()), 0)  # 가짜 함수는 실제 외부 호출이 아니다
+
+    def test_planning_receives_rich_resources_and_independent_snapshot(self):
+        item = {"id": "r1", "name": "자원", "purpose": "connection", "age_match": "partial",
+                "description": "교류 활동", "eligibility": "회원 조건 확인", "reason": "예시 신호와 비교",
+                "check": "회비 확인", "application_method": "기관 문의", "schedule": "모집 확인 필요",
+                "age_ranges": [{"min": 25, "max": 39}], "isolation_relevance": "direct",
+                "relevance_reason": "교류 근거 있음, 효과는 미검증",
+                "source": {"url": "https://www.chuncheon.go.kr/test", "reference_year": 2026,
+                           "reference_year_kind": "publication", "reference_year_evidence": "2026년 소식지"}}
+        response = {"resources": [item], "warnings": ["자격 확인"], "coverage": {"status": "candidates_found"},
+                    "review": {"summary": "추가 확인"}, "has_example_context": True,
+                    "search_new_calls": 2, "exclusion_counts": {"closed": 1}}
+        result = to_existing_resources(response, ["관측 제한"])
+        self.assertEqual(result.resources[0].eligibility, item["eligibility"])
+        self.assertEqual(result.resources[0].reason, item["reason"])
+        self.assertEqual(result.resources[0].source, item["source"])
+        self.assertEqual(result.resources[0].source_url, item["source"]["url"])
+        self.assertEqual(result.resources[0].age_ranges, item["age_ranges"])
+        self.assertEqual(result.recommendation, response)
+        self.assertTrue(result.has_example_context)
+        self.assertEqual(result.warnings, ["관측 제한", "자격 확인"])
+        response["resources"][0]["source"]["reference_year"] = 1999
+        self.assertEqual(result.resources[0].source["reference_year"], 2026)
+        self.assertEqual(result.recommendation["resources"][0]["source"]["reference_year"], 2026)
+
+    def test_empty_success_and_unavailable_remain_distinct(self):
+        ctx = NodeContext(run_id="test", mode="live")
+        result = recommend_existing(ctx, self.profile, live_call=lambda payload: {
+            "resources": [], "coverage": {"status": "no_grounded_candidates"}})
+        self.assertEqual(result.status, "available")
+        self.assertEqual(result.resources, [])
+        self.assertEqual(result.coverage["status"], "no_grounded_candidates")
+        self.assertTrue(result.has_example_context)
+        self.assertEqual(result.recommendation["analysis_context"]["profile"]["evidence"][0]["value"], -0.083)
+
+
+class WelfareCallAccountingTests(unittest.TestCase):
+    def setUp(self):
+        self.profile = TargetProfile.model_validate(profile_data())
+        SEARCH_CACHE.clear()
+        self.addCleanup(SEARCH_CACHE.clear)
+        config = {"key": "fake-key", "search_key": "fake-search", "model": "gemini-3.5-flash-lite"}
+        patcher = patch("ai.welfare_agent.live_agent.configuration", return_value=config)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def response(self, data):
+        return io.BytesIO(json.dumps(data).encode())
+
+    def local(self, count=2):
+        return {"results": [{"url": f"https://www.chuncheon.go.kr/service/{i}",
+                             "content": "청년 지원대상과 신청방법 안내"} for i in range(count)], "usage": {"credits": 1}}
+
+    def judgment(self):
+        return {"candidates": [{"finishReason": "STOP", "content": {"parts": [
+            {"text": json.dumps({"summary": "예시 검증", "questions": [], "resources": []})}]}}]}
+
+    def test_failed_gemini_and_manual_cached_retry_count_real_attempts(self):
+        first, second = NodeContext("one", "live"), NodeContext("two", "live")
+        responses = [self.response(self.local()), HTTPError("https://test", 503, "busy", {}, None),
+                     self.response(self.judgment())]
+        with patch("ai.welfare_agent.live_agent.urlopen", side_effect=responses) as send:
+            failure = recommend_existing(first, self.profile)
+            result = recommend_existing(second, self.profile)
+        self.assertEqual(failure.status, "unavailable")
+        self.assertEqual(result.status, "available")
+        self.assertEqual(dict(first.calls), {"tavily": 1, "gemini": 1})
+        self.assertEqual(dict(second.calls), {"gemini": 1})
+        self.assertEqual(send.call_count, 3)
+        self.assertTrue(result.recommendation["search_cache_hit"])
+
+    def test_two_searches_and_gemini_failure_are_counted(self):
+        national = {"results": [{"url": "https://www.bokjiro.go.kr/service", "content": "서비스 안내"}]}
+        ctx = NodeContext("run", "live")
+        with patch("ai.welfare_agent.live_agent.urlopen", side_effect=[self.response(self.local(1)),
+                   self.response(national), HTTPError("https://test", 429, "limit", {}, None)]):
+            result = recommend_existing(ctx, self.profile)
+        self.assertEqual(result.status, "unavailable")
+        self.assertEqual(dict(ctx.calls), {"tavily": 2, "gemini": 1})
+
+    def test_no_key_causes_no_external_attempt(self):
+        ctx = NodeContext("run", "live")
+        with patch("ai.welfare_agent.live_agent.configuration", return_value={"key": "", "search_key": "", "model": "gemini-3.5-flash-lite"}), \
+                patch("ai.welfare_agent.live_agent.urlopen") as send:
+            result = recommend_existing(ctx, self.profile)
+        self.assertEqual(result.status, "unavailable")
+        self.assertEqual(sum(ctx.calls.values()), 0)
+        send.assert_not_called()
 
 
 if __name__ == "__main__":

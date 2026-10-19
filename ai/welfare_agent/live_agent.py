@@ -55,7 +55,7 @@ def config_status():
             "model": config["model"], "provider": "gemini", "search_provider": "tavily"}
 
 
-def response_call(payload, config):
+def response_call(payload, config, *, on_external_call=None):
     # 무료 텍스트 입출력 모델만 사용하고 Gemini 검색 도구는 붙이지 않는다. 다른 모델·유료 제공자로 대체하지 않는다.
     if config["model"] not in FREE_MODELS:
         raise AgentError("GEMINI_MODEL을 gemini-3.5-flash-lite로 설정해주세요. 다른 모델로 자동 전환하지 않습니다.", 503)
@@ -63,6 +63,8 @@ def response_call(payload, config):
                       data=json.dumps(payload).encode("utf-8"),
                       headers={"x-goog-api-key": config['key'], "Content-Type": "application/json"})
     try:
+        if on_external_call:
+            on_external_call("gemini")
         with urlopen(request, timeout=45) as response:
             result = json.load(response)
     except HTTPError as error:
@@ -130,7 +132,7 @@ def official_url(url):
         return None
 
 
-def tavily_search(payload, config):
+def tavily_search(payload, config, *, on_external_call=None):
     """검색 1회만 실행한다. 자동 심화·답변 생성·원문 추출은 사용하지 않는다."""
     # 공개 검색 결과만 잠시 메모리에 보관한다. 분석 입력·모델 판단·인증 키 원문은 보관하지 않는다.
     cache_key = hashlib.sha256((config["search_key"] + json.dumps(payload, sort_keys=True, ensure_ascii=False)).encode()).hexdigest()
@@ -141,6 +143,8 @@ def tavily_search(payload, config):
     request = Request("https://api.tavily.com/search", data=json.dumps(payload).encode("utf-8"),
                       headers={"Authorization": "Bearer " + config["search_key"], "Content-Type": "application/json"})
     try:
+        if on_external_call:
+            on_external_call("tavily")
         with urlopen(request, timeout=30) as response:
             result = json.load(response)
     except HTTPError as error:
@@ -292,6 +296,10 @@ RESULT_SCHEMA = object_schema({"summary": STRING, "questions": STRINGS, "resourc
 
 JUDGE_INSTRUCTIONS = """복지자원 추천 Agent다. 제공된 집단 분석 결과, 담당자 확인 정보와 검색 근거를 대조해
 검토할 가치가 높은 자원 최대 5개를 판단하고 그 순서로 반환하라. 고정된 서비스 목록이나 신호-서비스 매핑은 없다.
+analysis_context가 있으면 profile.evidence의 id·value·unit·period·source를 그대로 근거로 사용하라.
+ratio와 percent를 혼동하지 말고 수치·출처를 새로 만들지 마라. causes는 확인이 필요한 원인 가설이며 진단이 아니다.
+가설의 evidence_ids로 실제 근거를 추적하라. 판정이 없거나 held/partial이면 원인을 확정하거나 위험 단계를 재해석하지 마라.
+성별은 선택 집단의 맥락일 뿐 개인의 신청 자격을 보장하지 않는다.
 중앙 자료는 해당 지역의 시행·모집을 보증하지 않는다. 지역 제공 여부가 미확인이면 이를 명시하라.
 source_kind와 detail_hint는 자료 형식·검색 발췌문의 단서이며 내용 정확도·최신성·적합성 점수가 아니다.
 추천 이유에는 입력의 어떤 근거와 연결되는지, 아직 무엇을 모르는지 설명하라. 확인된 필요는 중요한 참고 정보이며
@@ -324,18 +332,20 @@ eligibility 또는 check에 포함하고 무료라고 가정하지 마라. 추�
 적절한 검색 근거가 없으면 resources를 비우고 summary에 한계를 설명하라. 답변은 한국어로 작성하라."""
 
 
-def recommend_live(payload, *, call=None, search_call=None):
+def recommend_live(payload, *, call=None, search_call=None, on_external_call=None):
     target = validate_request(payload)
     config = configuration()
     if not config["key"].strip():
         raise AgentError("Gemini API 키가 없습니다. 프로젝트 .env에 GEMINI_API_KEY를 설정해주세요. 저장 자료로 자동 대체하지 않습니다.", 503)
     if not config["search_key"].strip():
         raise AgentError("Tavily API 키가 없습니다. 프로젝트 .env에 TAVILY_API_KEY를 설정해주세요.", 503)
-    call = call or response_call
-    search_call = search_call or tavily_search
+    call = call or (lambda data, settings: response_call(data, settings, on_external_call=on_external_call))
+    search_call = search_call or (lambda data, settings: tavily_search(data, settings, on_external_call=on_external_call))
     today = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
     context = {"today": today, "target": target, "risk_assessment": payload.get("risk_assessment"),
                "confirmed_support_needs": payload.get("confirmed_support_needs", [])}
+    if "analysis_context" in payload:
+        context["analysis_context"] = payload["analysis_context"]
     if config["model"] not in FREE_MODELS:
         raise AgentError("GEMINI_MODEL을 gemini-3.5-flash-lite로 설정해주세요.", 503)
     # 검색에는 공개 조건만, 현재 분석 결과는 Gemini 판단에만 전달한다.
@@ -352,6 +362,11 @@ def recommend_live(payload, *, call=None, search_call=None):
         result["searched_at"] = min(source_dates[item["url"]] for item in evidence)
         for resource in result["resources"]:
             resource["source"]["checked_at"] = source_dates[resource["source"]["url"]]
+        if "analysis_context" in payload:
+            result["analysis_context"] = deepcopy(payload["analysis_context"])
+            if payload["analysis_context"]["profile"]["is_example"] and not result["has_example_context"]:
+                result["has_example_context"] = True
+                result["warnings"].append("분석 맥락은 예시이며 실제 분석 결과가 아닙니다.")
         result["search_query"] = stages[0]["query"]
         result["search_queries"] = [stage["query"] for stage in stages]
         result["search_stages"] = stages

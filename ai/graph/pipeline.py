@@ -87,7 +87,8 @@ class _Node:
         self.name, self.recorder, self.body, self.on_error, self.fallback = name, recorder, body, on_error, fallback
 
     def __call__(self, state: PipelineState) -> dict:
-        ctx = NodeContext(run_id=state["run_id"], mode=state["mode"])
+        ctx = NodeContext(run_id=state["run_id"], mode=state["mode"],
+                          cause_hypotheses=state.get("causes", []))
         started = self.recorder.emit(self.name, "started")
         clock = monotonic()
         try:

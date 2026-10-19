@@ -5,6 +5,7 @@ import io
 import json
 import unittest
 from unittest.mock import patch, Mock
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, search_resources, config_status, SEARCH_CACHE, SEARCH_CACHE_LIMIT
@@ -71,6 +72,34 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual(result['resources'][0]['age_match'], 'partial')
         self.assertEqual(result['resources'][0]['support_basis'], 'llm_analysis_match')
         self.assertEqual(result['review']['summary'], example_decision()['summary'])
+
+    def test_analysis_context_reaches_gemini_but_not_search(self):
+        from ai.contracts import TargetProfile, CauseHypothesis
+        from ai.nodes.welfare import to_welfare_payload
+        data = json.loads((Path(__file__).parent / 'fixtures' / 'target_profile_example.json').read_text(encoding='utf-8'))
+        profile = TargetProfile.model_validate(data)
+        self.payload, _ = to_welfare_payload(profile, 'test', causes=[CauseHypothesis(
+            code='C3_overall_withdrawal', evidence_ids=['E1', 'E2'], explanation='확인할 가설 전용 문장')])
+        decision = example_decision()
+        decision['resources'][0]['age_ranges'] = [{'min': 20, 'max': 39}]
+        # 표본은 20대이므로 해당 검색 단서로 채운다.
+        search_response = copy.deepcopy(self.search)
+        for item in search_response['results']:
+            item['content'] = '청년 지원대상과 신청방법 안내'
+        search = Mock(return_value=search_response)
+        call = Mock(return_value={'candidates': [message(json.dumps(decision))]})
+        original = copy.deepcopy(self.payload)
+        result = recommend_live(self.payload, call=call, search_call=search)
+        context = json.loads(call.call_args.args[0]['contents'][0]['parts'][0]['text'])['context']['analysis_context']
+        self.assertEqual(context['profile']['evidence'][0]['value'], -0.083)
+        self.assertEqual(context['profile']['evidence'][0]['unit'], 'ratio')
+        self.assertEqual(context['causes'][0]['evidence_ids'], ['E1', 'E2'])
+        search_text = json.dumps(search.call_args.args[0], ensure_ascii=False)
+        self.assertNotIn('확인할 가설 전용 문장', search_text)
+        self.assertNotIn('-0.083', search_text)
+        self.assertNotIn('analysis_context', search_text)
+        self.assertEqual(result['analysis_context'], original['analysis_context'])
+        self.assertEqual(self.payload, original)
 
     def test_missing_key_does_not_call_provider_or_fall_back(self):
         self.config['key'] = ''
