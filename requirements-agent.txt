@@ -1,0 +1,4 @@
+# Python 3.12; direct runtime dependencies verified 2026-10-18.
+langgraph==1.2.16
+langgraph-checkpoint-sqlite==3.1.2
+jsonschema==4.26.0

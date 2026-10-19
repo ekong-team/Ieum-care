@@ -1,0 +1,1381 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ieum-care 1→2→3 입출력 계약 제안 v1",
+  "description": "현재 분석 근거를 보존하는 인터페이스 제안. API 및 2·3번 구현 완료를 의미하지 않음.",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/AnalysisResponse"
+    },
+    {
+      "$ref": "#/$defs/ResourceCatalog"
+    },
+    {
+      "$ref": "#/$defs/RecommendationRequest"
+    },
+    {
+      "$ref": "#/$defs/RecommendationResponse"
+    },
+    {
+      "$ref": "#/$defs/ProgramPlan"
+    },
+    {
+      "$ref": "#/$defs/EvaluationRequest"
+    },
+    {
+      "$ref": "#/$defs/EvaluationResponse"
+    }
+  ],
+  "$defs": {
+    "Selection": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "string",
+          "enum": [
+            "202507",
+            "202508",
+            "202509",
+            "202510",
+            "202511",
+            "202512"
+          ]
+        },
+        "region_code": {
+          "type": "string",
+          "enum": [
+            "11230",
+            "32010"
+          ]
+        },
+        "region_name": {
+          "type": "string"
+        },
+        "age_code": {
+          "type": "string",
+          "enum": [
+            "10G",
+            "20G",
+            "30G",
+            "40G",
+            "50G",
+            "60GU"
+          ]
+        },
+        "age_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "month",
+        "region_code",
+        "region_name",
+        "age_code",
+        "age_name"
+      ],
+      "additionalProperties": false
+    },
+    "SourceRef": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "official_source",
+            "quotation",
+            "user_assumption",
+            "provided_analysis"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "verified_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source_id",
+        "kind",
+        "url",
+        "title",
+        "verified_on",
+        "note"
+      ],
+      "additionalProperties": false
+    },
+    "Evidence": {
+      "type": "object",
+      "required": [
+        "월",
+        "지역",
+        "연령대",
+        "활동위축단계",
+        "소비_일평균건수_전월변화율",
+        "통신_연령유동량_전월변화율",
+        "업종민감도주의"
+      ],
+      "properties": {
+        "월": {
+          "type": "string"
+        },
+        "지역": {
+          "type": "string"
+        },
+        "연령대": {
+          "type": "string"
+        },
+        "활동위축단계": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 5
+        },
+        "소비_일평균건수_전월변화율": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "통신_연령유동량_전월변화율": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "업종민감도주의": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true,
+      "description": "기존 activity-evidence-v1 record를 그대로 보존. 기존 한국어 항목을 삭제하지 않음."
+    },
+    "AnalysisResponse": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "integration-v1"
+          ]
+        },
+        "analysis_version": {
+          "type": "string"
+        },
+        "analysis_id": {
+          "type": "string"
+        },
+        "selection": {
+          "$ref": "#/$defs/Selection"
+        },
+        "analysis_status": {
+          "type": "string",
+          "enum": [
+            "provisional",
+            "held"
+          ]
+        },
+        "analysis_evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "rules": {
+          "type": "object"
+        },
+        "sensitivity": {
+          "type": "object"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "spatial_status": {
+          "type": "string"
+        },
+        "approval_status": {
+          "type": "string",
+          "enum": [
+            "pending_team_review",
+            "team_agreed"
+          ]
+        },
+        "provenance": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "analysis_version",
+        "analysis_id",
+        "selection",
+        "analysis_status",
+        "analysis_evidence",
+        "rules",
+        "sensitivity",
+        "limitations",
+        "spatial_status",
+        "approval_status",
+        "provenance"
+      ],
+      "additionalProperties": false
+    },
+    "Resource": {
+      "type": "object",
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "service",
+            "program"
+          ]
+        },
+        "region_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "11230",
+              "32010",
+              "nationwide"
+            ]
+          }
+        },
+        "service_area_note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "age_min": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "age_max": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "eligibility_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "residency_required": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "start_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "end_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "application_method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fee_krw": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "source_title": {
+          "type": "string"
+        },
+        "published_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verified_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification_status": {
+          "type": "string",
+          "enum": [
+            "verified",
+            "needs_confirmation"
+          ]
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "active",
+            "expired",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "resource_id",
+        "name",
+        "provider",
+        "kind",
+        "region_codes",
+        "service_area_note",
+        "age_min",
+        "age_max",
+        "eligibility_text",
+        "residency_required",
+        "start_date",
+        "end_date",
+        "application_method",
+        "fee_krw",
+        "source_url",
+        "source_title",
+        "published_date",
+        "verified_on",
+        "verification_status",
+        "availability"
+      ],
+      "additionalProperties": false
+    },
+    "ResourceCatalog": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "welfare-resources-v1"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "not_collected",
+            "partially_verified",
+            "verified"
+          ]
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Resource"
+          }
+        },
+        "missing_regions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "11230",
+              "32010"
+            ]
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "status",
+        "resources",
+        "missing_regions",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "Constraints": {
+      "type": "object",
+      "properties": {
+        "usage_mode": {
+          "type": "string",
+          "enum": [
+            "activity_group_planning"
+          ]
+        },
+        "objective": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "planned_participants": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "duration_weeks": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "budget_limit_krw": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "venue": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "access_support": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "usage_mode",
+        "objective",
+        "planned_participants",
+        "duration_weeks",
+        "budget_limit_krw",
+        "venue",
+        "access_support"
+      ],
+      "additionalProperties": false
+    },
+    "RecommendationRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "integration-v1"
+          ]
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "planning_as_of": {
+          "type": "string",
+          "format": "date"
+        },
+        "analysis": {
+          "$ref": "#/$defs/AnalysisResponse"
+        },
+        "resource_catalog": {
+          "$ref": "#/$defs/ResourceCatalog"
+        },
+        "constraints": {
+          "$ref": "#/$defs/Constraints"
+        }
+      },
+      "required": [
+        "schema_version",
+        "request_id",
+        "planning_as_of",
+        "analysis",
+        "resource_catalog",
+        "constraints"
+      ],
+      "additionalProperties": false
+    },
+    "EligibilityCheck": {
+      "type": "object",
+      "properties": {
+        "condition": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "matches",
+            "does_not_match",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "source_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "condition",
+        "status",
+        "reason",
+        "source_ref"
+      ],
+      "additionalProperties": false
+    },
+    "Recommendation": {
+      "type": "object",
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "analysis_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "eligibility_checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EligibilityCheck"
+          }
+        },
+        "application_method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          }
+        }
+      },
+      "required": [
+        "resource_id",
+        "name",
+        "analysis_id",
+        "reason",
+        "eligibility_checks",
+        "application_method",
+        "source_refs"
+      ],
+      "additionalProperties": false
+    },
+    "BudgetItem": {
+      "type": "object",
+      "properties": {
+        "item_id": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "unit_price_krw": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "quantity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "occurrences": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string"
+        },
+        "cost_basis": {
+          "type": "string",
+          "enum": [
+            "documented",
+            "assumption",
+            "unknown"
+          ]
+        },
+        "source_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "item_id",
+        "category",
+        "description",
+        "unit_price_krw",
+        "quantity",
+        "occurrences",
+        "unit",
+        "cost_basis",
+        "source_ref"
+      ],
+      "additionalProperties": false
+    },
+    "PerformanceMeasure": {
+      "type": "object",
+      "properties": {
+        "metric_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "denominator": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "measurement_timing": {
+          "type": "string"
+        },
+        "data_collection_method": {
+          "type": "string"
+        },
+        "responsible_party": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "target_basis": {
+          "type": "string",
+          "enum": [
+            "documented",
+            "assumption",
+            "unset"
+          ]
+        },
+        "source_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "metric_id",
+        "name",
+        "definition",
+        "denominator",
+        "measurement_timing",
+        "data_collection_method",
+        "responsible_party",
+        "target_value",
+        "target_basis",
+        "source_ref"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramPlan": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "integration-v1"
+          ]
+        },
+        "plan_id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "ready_for_review"
+          ]
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "generated_proposal",
+            "user_input"
+          ]
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "improvement",
+            "new"
+          ]
+        },
+        "base_resource_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "analysis_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "objective": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "region_code": {
+              "type": "string",
+              "enum": [
+                "11230",
+                "32010"
+              ]
+            },
+            "age_code": {
+              "type": "string",
+              "enum": [
+                "10G",
+                "20G",
+                "30G",
+                "40G",
+                "50G",
+                "60GU"
+              ]
+            },
+            "planned_participants": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "eligibility_text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "residency_confirmation": {
+              "type": "string",
+              "enum": [
+                "confirmed",
+                "unknown",
+                "not_required"
+              ]
+            }
+          },
+          "required": [
+            "region_code",
+            "age_code",
+            "planned_participants",
+            "eligibility_text",
+            "residency_confirmation"
+          ],
+          "additionalProperties": false
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "activity_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "activity_id",
+              "name",
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "schedule": {
+          "type": "object",
+          "properties": {
+            "start_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "end_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sessions": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "venue": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "start_date",
+            "end_date",
+            "sessions",
+            "venue"
+          ],
+          "additionalProperties": false
+        },
+        "performance_measures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PerformanceMeasure"
+          }
+        },
+        "budget_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BudgetItem"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          }
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "plan_id",
+        "version",
+        "status",
+        "origin",
+        "mode",
+        "base_resource_id",
+        "analysis_id",
+        "title",
+        "objective",
+        "target",
+        "activities",
+        "schedule",
+        "performance_measures",
+        "budget_items",
+        "assumptions",
+        "source_refs",
+        "missing_fields"
+      ],
+      "additionalProperties": false
+    },
+    "RecommendationResponse": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "integration-v1"
+          ]
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "analysis_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "resource_data_required",
+            "needs_confirmation",
+            "no_match"
+          ]
+        },
+        "recommendations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Recommendation"
+          }
+        },
+        "excluded_resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "program_plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgramPlan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "request_id",
+        "analysis_id",
+        "status",
+        "recommendations",
+        "excluded_resources",
+        "questions",
+        "program_plan",
+        "warnings"
+      ],
+      "additionalProperties": false
+    },
+    "EvaluationRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "integration-v1"
+          ]
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "planning_as_of": {
+          "type": "string",
+          "format": "date"
+        },
+        "analysis": {
+          "$ref": "#/$defs/AnalysisResponse"
+        },
+        "program_plan": {
+          "$ref": "#/$defs/ProgramPlan"
+        },
+        "criteria_version": {
+          "type": "string",
+          "enum": [
+            "planning-review-v1"
+          ]
+        },
+        "budget_limit_krw": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "baseline_plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgramPlan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "request_id",
+        "planning_as_of",
+        "analysis",
+        "program_plan",
+        "criteria_version",
+        "budget_limit_krw",
+        "baseline_plan"
+      ],
+      "additionalProperties": false
+    },
+    "CriterionResult": {
+      "type": "object",
+      "properties": {
+        "criterion_id": {
+          "type": "string",
+          "enum": [
+            "target_fit",
+            "activity_rationale",
+            "feasibility",
+            "accessibility",
+            "measurement"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "supported",
+            "needs_revision",
+            "insufficient_data"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "improvements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "criterion_id",
+        "status",
+        "evidence",
+        "improvements"
+      ],
+      "additionalProperties": false
+    },
+    "BudgetResult": {
+      "type": "object",
+      "properties": {
+        "currency": {
+          "type": "string",
+          "enum": [
+            "KRW"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "documented",
+            "estimated",
+            "incomplete"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "item_id": {
+                "type": "string"
+              },
+              "amount_krw": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "formula": {
+                "type": "string"
+              },
+              "cost_basis": {
+                "type": "string",
+                "enum": [
+                  "documented",
+                  "assumption",
+                  "unknown"
+                ]
+              },
+              "source_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "item_id",
+              "amount_krw",
+              "formula",
+              "cost_basis",
+              "source_ref"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "documented_subtotal_krw": {
+          "type": "number",
+          "minimum": 0
+        },
+        "available_subtotal_krw": {
+          "type": "number",
+          "minimum": 0
+        },
+        "total_krw": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "per_participant_krw": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "over_budget": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "currency",
+        "status",
+        "items",
+        "documented_subtotal_krw",
+        "available_subtotal_krw",
+        "total_krw",
+        "per_participant_krw",
+        "over_budget",
+        "missing_fields"
+      ],
+      "additionalProperties": false
+    },
+    "EvaluationResponse": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "integration-v1"
+          ]
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "evaluation_id": {
+          "type": "string"
+        },
+        "analysis_id": {
+          "type": "string"
+        },
+        "plan_id": {
+          "type": "string"
+        },
+        "criteria_version": {
+          "type": "string",
+          "enum": [
+            "planning-review-v1"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "needs_input",
+            "needs_revision"
+          ]
+        },
+        "criteria_results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CriterionResult"
+          }
+        },
+        "performance_plan": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PerformanceMeasure"
+          }
+        },
+        "budget": {
+          "$ref": "#/$defs/BudgetResult"
+        },
+        "comparison": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "baseline_plan_id": {
+                  "type": "string"
+                },
+                "revised_plan_id": {
+                  "type": "string"
+                },
+                "same_scope_confirmed": {
+                  "type": "boolean"
+                },
+                "budget_difference_krw": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "notes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "baseline_plan_id",
+                "revised_plan_id",
+                "same_scope_confirmed",
+                "budget_difference_krw",
+                "notes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provenance": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "request_id",
+        "evaluation_id",
+        "analysis_id",
+        "plan_id",
+        "criteria_version",
+        "status",
+        "criteria_results",
+        "performance_plan",
+        "budget",
+        "comparison",
+        "questions",
+        "missing_fields",
+        "provenance"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
