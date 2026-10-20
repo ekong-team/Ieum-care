@@ -1,3 +1,5 @@
+2026-10-20 메인 병합 전 최종 검증: 사용하지 않는 기온·물가 탐색 스크립트2개를 추가 제외해 로컬 보관58개. 공간 패키지를 설치해 이전 생략3개까지 실행했으며 전체241개 통과·실패0·오류0·생략0. 외부API호출0, 기존분석216개·순위24개 재계산도 통과.
+
 # 현재 분석 작업 인수인계 — 2026-10-20
 
 사용자는 한국어 설명을 원하며, AI가 직접 구현·검증하고 과정과 실제 기여를 기록하도록 요청했다. 사용자가 최신 Gemini/Tavily 개선 포함, 불필요 파일 정리, 자기 브랜치 업로드, 원본부터1차 우선순위/다음Agent입력까지 파일별 상세 설명을 명시 요청했다.
@@ -6,7 +8,7 @@
 
 - hansu_analysis_pipeline.md: 현재 전체 과정·파일 역할·계산·실행·전달 계약.
 - agent_environment.md: Python3.12 .venv-agent와 직접 의존성.
-- branch_cleanup_20261020.md: 활성 폴더에서 제외한56개 파일과 보관 위치.
+- branch_cleanup_20261020.md: 활성 폴더에서 제외한58개 파일과 보관 위치.
 - analysis_research_improvement_20261020.md: focused검색·인용 검사와 실제 근거 부족 결과.
 
 ## 현재 코드와 기본 실행
@@ -40,7 +42,7 @@ data/processed/analysis_research_review_20261020/analysis_explained.md는 실제
 
 ## 보관과 검증
 
-과거문서·독립수정실험 등56개는 .local-archive/branch_cleanup_20261020/items에 원래경로로보관했고해시manifest있음.원본·가공자료·가상환경·논문·트러블슈팅은보존. Git업로드는코드/문서/빈설정예시뿐. 상세시험수치는 data/processed/branch_validation_20261020/regression.json를확인.
+과거문서·독립수정실험 등58개는 .local-archive/branch_cleanup_20261020/items에 원래경로로보관했고해시manifest있음.원본·가공자료·가상환경·논문·트러블슈팅은보존. Git업로드는코드/문서/빈설정예시뿐. 상세시험수치는 data/processed/branch_validation_20261020/regression.json를확인.
 
 초기전체시험에서외부차단기가지역HTTP시험도막았고, localhost허용으로고친뒤에도샌드박스WinError10013으로13개가막힘. 외부연결차단은유지하고로컬HTTP권한환경에서재실행했다. 제품코드결함으로표현하지말고실제검증결과를확인할것.
 
