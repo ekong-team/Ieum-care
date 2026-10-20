@@ -8,7 +8,8 @@
 ```text
 Ieum-care/
 ├─ ai/
-│  ├─ risk_model/                 # 위험도 개발 예정
+│  ├─ analysis_agent/             # 성별 분석·단계·근거 검토·1차 우선순위
+│  ├─ risk_model/                 # 과거 합산 배경자료 재현 보조
 │  ├─ welfare_agent/              # Gemini 검색·복지 추천 Agent 및 입력 검증
 │  └─ evaluation/                 # 프로그램 평가·예산 분석 예정
 ├─ backend/                       # 로컬 화면·복지자원 조회 API
@@ -164,3 +165,11 @@ AI를 활용해 신규 프로그램 또는 개선안을 제안한다.
 - Pandas
 - Scikit-learn
 - LLM / RAG
+
+## 한수 분석 작업
+
+현재 분석은 성별 집단의 활동 위축 단계·근거·가설과 위험 단계 기준1차 우선순위까지 담당한다. 실행 파일은 scripts/integration/run_analysis_agent.py, 파이썬 모듈 진입점은 ai/analysis_agent/workflow.py의 run_analysis()다. Gemini·Tavily는 선택적으로 연결하며 기본 실행은 API를 호출하지 않는다.
+
+원본→정제→성별 분석→단계→순위→다음 Agent 입력의 파일별 설명은 [전체 분석 처리 과정](docs/hansu_analysis_pipeline.md), 환경은 [실행 환경](docs/agent_environment.md), 정리 내용은 [파일 정리 기록](docs/branch_cleanup_20261020.md)을 참고한다.
+
+성별을 보존한 risk-input-0.2를 한수의 기준 출력으로 확정했고, 현지가 수신부를 이에 맞춘다. 코드 병합과 전체 서비스 연결 완료는 구분한다. 과거 독립 수정 에이전트 실험은 현재 분석 경로에서 제외했다.

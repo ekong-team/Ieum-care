@@ -1,0 +1,227 @@
+{
+  "$defs": {
+    "SignalInput": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "activity_decline",
+            "consumption_decline",
+            "movement_decline"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "description"
+      ],
+      "title": "SignalInput",
+      "type": "object"
+    },
+    "WelfareRisk02": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "partial",
+            "held"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "model_version": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "risk-input-0.2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "assessment_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Assessment Id",
+          "type": "string"
+        },
+        "region": {
+          "enum": [
+            "춘천시",
+            "강남구"
+          ],
+          "title": "Region",
+          "type": "string"
+        },
+        "age_group": {
+          "enum": [
+            10,
+            20,
+            30,
+            40,
+            50,
+            60
+          ],
+          "title": "Age Group",
+          "type": "integer"
+        },
+        "sex": {
+          "enum": [
+            "all",
+            "male",
+            "female"
+          ],
+          "title": "Sex",
+          "type": "string"
+        },
+        "period": {
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+          "title": "Period",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "$ref": "#/$defs/SignalInput"
+          },
+          "maxItems": 3,
+          "title": "Signals",
+          "type": "array"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Limitations",
+          "type": "array"
+        },
+        "is_example": {
+          "title": "Is Example",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "model_version",
+        "schema_version",
+        "assessment_id",
+        "region",
+        "age_group",
+        "sex",
+        "period",
+        "signals",
+        "limitations",
+        "is_example"
+      ],
+      "title": "WelfareRisk02",
+      "type": "object"
+    },
+    "WelfareTarget02": {
+      "additionalProperties": false,
+      "properties": {
+        "region": {
+          "enum": [
+            "춘천시",
+            "강남구"
+          ],
+          "title": "Region",
+          "type": "string"
+        },
+        "age_group": {
+          "enum": [
+            10,
+            20,
+            30,
+            40,
+            50,
+            60
+          ],
+          "title": "Age Group",
+          "type": "integer"
+        },
+        "sex": {
+          "enum": [
+            "all",
+            "male",
+            "female"
+          ],
+          "title": "Sex",
+          "type": "string"
+        },
+        "purpose": {
+          "default": "all",
+          "enum": [
+            "all",
+            "connection",
+            "daily",
+            "wellbeing",
+            "economic",
+            "other"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "region",
+        "age_group",
+        "sex"
+      ],
+      "title": "WelfareTarget02",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "$ref": "#/$defs/WelfareTarget02"
+    },
+    "risk_assessment": {
+      "$ref": "#/$defs/WelfareRisk02"
+    },
+    "confirmed_support_needs": {
+      "items": {
+        "enum": [
+          "connection",
+          "daily",
+          "wellbeing",
+          "economic",
+          "other"
+        ],
+        "type": "string"
+      },
+      "title": "Confirmed Support Needs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "target",
+    "risk_assessment"
+  ],
+  "title": "WelfareRequest02",
+  "type": "object"
+}
