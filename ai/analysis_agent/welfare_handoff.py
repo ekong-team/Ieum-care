@@ -1,4 +1,4 @@
-"""한수 분석 → 현지 복지 추천의 입력 제안. 기존 성별 없는 입력에 조용히 축소하지 않는다."""
+"""한수 분석의 기준 출력 계약. 현지 추천 수신부가 이 성별 보존 형식에 맞춘다."""
 from typing import Literal
 from datetime import date
 from pydantic import Field, model_validator, field_validator
@@ -72,7 +72,7 @@ class WelfareRequest02(Strict):
         return self
 
 def to_welfare_request(cohort: dict) -> dict:
-    """현지와 합의할 risk-input-0.2 요청. 성별을 필수 필드로 보존한다."""
+    """사용자가 기준으로 확정한 risk-input-0.2 요청. 성별을 필수 필드로 보존한다."""
     profile = cohort["profile"]
     if profile != profile_for(cohort["assessment"]) or digest(profile) != cohort["profile_hash"]:
         raise ValueError("분석과 전달할 대상 정보가 다릅니다.")
@@ -106,4 +106,4 @@ def handoff_record(cohort: dict) -> dict:
         analysis_context={key:cohort[key] for key in (
             "assessment","team_causes","sensitivity","characteristics","background_context","interpretation","evidence_provenance")},
         profile_hash=digest(cohort["profile"]),
-        integration_status="proposed_requires_receiver_update")
+        integration_status="producer_contract_fixed_receiver_update_pending")

@@ -8,7 +8,7 @@
 - 분석 모듈: ai/analysis_agent/workflow.py 의 run_analysis()
 - 준비 입력: features.csv / sensitivity.csv / context.json
 - 출력: analysis_bundle.json / profiles/ / priority_review.json / analysis_explained.md
-- 현지 성별 입력0.2는 제안이며 수신 코드 변경이 필요하다.
+- 한수 출력 risk-input-0.2를 기준으로 확정했다. 현지가 자기 수신부를 이 형식에 맞춘다.
 - Gemini·Tavily는 선택 실행이다. 기본 실행은 API를 호출하지 않는다.
 - 원본·가공 결과·키·가상환경·로컬 보관함은 Git에 포함하지 않는다.
 - 원본에서 새로 실행하려면 보유 원본과 인구·달력 배경자료가 별도로 필요하다.

@@ -114,20 +114,20 @@ def build(results_root,output_root):
     (folder/"분석결과_설명.md").write_text(summary,encoding="utf-8")
     readme=(
         "# 현지에게 전달하는 분석 입력 묶음\n\n"
-        "이 ZIP은 분석 결과와 연결 제안이다. 네 복지 추천 코드를 자동으로 바꾸거나 외부API를 실행하지 않는다.\n\n"
+        "이 ZIP의 risk-input-0.2는 한수가 기준으로 확정한 출력 계약이다. 현지 추천 수신부가 이 형식에 맞춘다. 외부API를 실행하지 않는다.\n\n"
         "## 먼저 볼 파일\n\n"
         "1. 분석결과_설명.md: 내가 맡은 분석 범위·결과·한계.\n"
-        "2. examples/female_complete_proposed_request.json: 성별을 보존한 추천 입력 제안.\n"
-        "3. contracts/welfare_risk_input_0_2.schema.json: 제안 입력의 검사 규칙.\n"
+        "2. examples/female_complete_proposed_request.json: 성별을 보존한 기준 입력. 파일명의 proposed는 이전 식별자다.\n"
+        "3. contracts/welfare_risk_input_0_2.schema.json: 기준 입력의 검사 규칙.\n"
         "4. data/handoff_records.json: 집단별 입력과 상세 근거 전체216건.\n"
         "5. ai/analysis_agent/welfare_handoff.py: 분석 결과를 추천 입력으로 바꾸는 함수.\n\n"
         "## 현재 코드와 맞춰야 하는 부분\n\n"
         f"확인 기준 main 병합 커밋 {HYEONJI_SHA}. "
         "현재 risk-input-0.1은 target.sex/risk_assessment.sex를 받지 않는다. "
         "따라서 proposed_request 파일을 현재 서버에 그대로 넣으면 거부되는 것이 정상이다. "
-        "risk-input-0.2는 이번에 제안한 이름이며 팀 합의나 네 코드 반영이 완료된 버전이 아니다.\n\n"
+        "risk-input-0.2를 한수 출력 기준으로 확정했다. 이 문구가 수신부의 적용 완료를 뜻하지는 않는다. 수신부 변경은 현지 담당이다.\n\n"
         "- target.sex를 all/male/female 필수값으로 받고 risk_assessment.sex와 일치하는지 검사하기.\n"
-        "- risk_assessment의 schema_version에 합의한 새 버전을 적용하고 지역·연령·성별·기준월·상태를 보존하기.\n"
+        "- risk_assessment의 schema_version을 risk-input-0.2로 받고 지역·연령·성별·기준월·상태를 보존하기.\n"
         "- 모델 입력과 추천 응답·선택파일에서도 성별을 유지하기. 성별이 다르면 같은 추천 실행으로 취급하지 않기.\n"
         "- 성별이 같다는 이유로 경제·정서·건강 욕구를 만들어내지 않기. confirmed_support_needs는 확인 전 빈 목록.\n"
         "- 복지자원의 성별 자격은 공식 출처에 따라 확인하기. 분석 대상의 성별만으로 자격을 확정하지 않기.\n"
@@ -135,7 +135,7 @@ def build(results_root,output_root):
         "- 정욱의 to_welfare_payload도 지금 성별을 버리는 경고 경로가 있으므로 함께 수정해야 함.\n\n"
         "## 파일별 역할\n\n"
         "profiles/: 정욱 TargetProfile-0.2 입력216개. 이 형식은 이미 sex를 지원한다.\n"
-        "data/handoff_records.json: 각 record의 request_v02만 추천 요청 제안이다. "
+        "data/handoff_records.json: 각 record의 request_v02가 기준 추천 입력이다. "
         "analysis_context는 근거·가설·특성·배경·민감도 별도 자료이며 현재HTTP요청에 통째로 붙이지 않는다.\n"
         "data/priority_sex.json: 같은 기준월 남녀24집단 순위. priority_aggregate.json은 합산12집단 비교용. 두 목록을 섞지 않는다.\n"
         "examples/current_offline_aggregate_request.json: 현재 서버용 합산 조회 예시. mode=offline이며 남녀별 입력의 대체물이 아니다.\n"
@@ -147,7 +147,7 @@ def build(results_root,output_root):
         "분석을 원본부터 재현하려면 공통 저장소의 전처리 코드와 보유 원본이 별도로 필요하다.\n\n"
         "## 연결 순서\n\n"
         "여성완료 → 남성완료 → 부분판정 → 보류 → 성별불일치거부 →10대범위 확인 순서로 점검하자. "
-        "합의한 입력을 받은 뒤에도 실제 모델 응답 품질 검증은 따로 해야 한다.\n"
+        "기준 입력을 받은 뒤에도 실제 모델 응답 품질 검증은 따로 해야 한다.\n"
     )
     (folder/"README_현지에게.md").write_text(readme,encoding="utf-8")
     for source,destination in (("docs/hyeonji_analysis_handoff_20261019.md","입출력_맞추기.md"),
@@ -159,6 +159,7 @@ def build(results_root,output_root):
         shutil.copyfile(analysis_folder/"analysis_explained.md",folder/"실행결과_설명.md")
     manifest=dict(schema_version="hansu-hyeonji-package-v1",analysis_bundle_hash=bundle["bundle_hash"],
         profiles=len(records),proposed_contract="risk-input-0.2",receiver_update_required=True,
+        contract_status="producer_fixed_by_user",receiver_update_owner="welfare_receiver",
         hyeonji_reference_commit=HYEONJI_SHA,
         files=[dict(path=str(path.relative_to(folder)).replace("\\","/"),sha256=file_hash(path))
                for path in sorted(folder.rglob("*")) if path.is_file() and path.name!="MANIFEST.json"])
