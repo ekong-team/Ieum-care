@@ -13,6 +13,7 @@ import build_telecom_features as telecom
 from data_contract import AGES, require_keys, require_numbers
 from industry_classification import classify_industries
 from build_risk_features import safe_ratio
+from analyze_features import make_scenarios, REGION_SCOPE, correlation_review, feature_rule
 
 
 class PreprocessingTests(unittest.TestCase):
@@ -57,6 +58,54 @@ class PreprocessingTests(unittest.TestCase):
             self.assertTrue(result[f"FLOW_POP_DIFF_{code}"].isna().all())
             self.assertTrue(result[f"FLOW_POP_PCT_{code}"].isna().all())
         self.assertEqual(result.shape, (2, 42))
+
+
+def sample(months, total, candidate, held):
+    return pd.DataFrame({"월": months, "지역": ["테스트지역"] * len(months),
+                         "연령대": ["20대"] * len(months), "카드1_전체_결제건수": total,
+                         "카드1_외식·카페_결제건수": candidate,
+                         "카드1_문화·오락_결제건수": [0] * len(months),
+                         "카드1_운동_결제건수": [0] * len(months),
+                         "카드1_해석보류_결제건수": held,
+                         "카드1_미분류_결제건수": [0] * len(months)})
+
+
+class IndustrySensitivityTests(unittest.TestCase):
+    def test_denominator_changes_share_without_changing_activity_count(self):
+        result = make_scenarios(sample(["202507", "202508"], [100, 100], [20, 25], [40, 10]))
+        base = result[result["비교안"] == "현재기준"].reset_index(drop=True)
+        known = result[result["비교안"] == "보류제외분모"].reset_index(drop=True)
+        self.assertAlmostEqual(base.loc[1, "건수전월변화율"], 0.25)
+        self.assertAlmostEqual(known.loc[1, "건수전월변화율"], 0.25)
+        self.assertGreater(base.loc[1, "비중전월차이"], 0)
+        self.assertLess(known.loc[1, "비중전월차이"], 0)
+
+    def test_all_held_leaves_known_share_missing(self):
+        result = make_scenarios(sample(["202507"], [100], [0], [100]))
+        self.assertTrue(result.loc[result["비교안"] == "보류제외분모", "후보비중"].isna().all())
+        self.assertEqual(result.loc[result["비교안"] == "현재기준", "분모건수"].iloc[0], 100)
+
+    def test_nonadjacent_month_does_not_produce_change(self):
+        result = make_scenarios(sample(["202507", "202509"], [100, 100], [20, 25], [40, 10]))
+        self.assertTrue(result["건수전월변화율"].isna().all())
+        self.assertTrue(result["비중전월차이"].isna().all())
+
+
+class ModelInputReviewTests(unittest.TestCase):
+    def test_regional_correlation_counts_contexts_once(self):
+        rows = []
+        for month, value in [("202507", 1), ("202508", 2), ("202509", 3)]:
+            for age in ["10대", "20대", "30대", "40대", "50대", "60대이상"]:
+                rows.append({"월": month, "지역": "테스트지역", "연령대": age,
+                             "a": value, "b": value * 2})
+        registry = pd.DataFrame({"특징": ["a", "b"], "관측단위": [REGION_SCOPE] * 2, "숫자열": [True] * 2})
+        result = correlation_review(pd.DataFrame(rows), registry)
+        self.assertEqual(result.loc[0, "비교행수"], 3)
+        self.assertAlmostEqual(result.loc[0, "피어슨상관"], 1)
+
+    def test_unknown_feature_requires_review(self):
+        with self.assertRaises(ValueError):
+            feature_rule("새로운_위험관련_특징")
 
 
 if __name__ == "__main__":

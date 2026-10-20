@@ -9,10 +9,10 @@ AVAILABLE = all(importlib.util.find_spec(name) for name in ["shapely", "pyproj",
 if AVAILABLE:
     import pandas as pd
     from shapely.geometry import Polygon, box
-    from validate_region_boundaries import classify_points
+    from validate_regions import classify_points
 
 
-@unittest.skipUnless(AVAILABLE, "requirements-spatial.txt 설치 필요")
+@unittest.skipUnless(AVAILABLE, "requirements.txt 설치 필요")
 class SpatialValidationTests(unittest.TestCase):
     def test_inside_border_outside_and_wrong_code(self):
         attributes = pd.DataFrame({"SIGUNGU_CD": ["A", "B"]})

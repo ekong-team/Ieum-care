@@ -1,0 +1,196 @@
+[
+  {
+    "id": "cc-senior-care",
+    "region": "춘천시",
+    "name": "노인맞춤돌봄서비스",
+    "purpose": "daily",
+    "organization": "춘천시 · 통합돌봄과",
+    "description": "취약 어르신의 안부 확인, 사회참여와 생활교육, 이동·가사 등 일상 지원을 안내합니다.",
+    "eligibility": "65세 이상 기초생활수급·차상위·기초연금 수급 어르신 중 돌봄 필요자. 장기요양 등 유사 사업 이용 여부와 선정조사 확인이 필요합니다.",
+    "format": "기관 상담·대상자 확인 후 연계",
+    "schedule": "안내상 수시 신청. 현재 접수·지원 가능 여부 확인 필요.",
+    "reason": "선택한 지원 목적과 관련된 서비스 내용을 검토할 수 있습니다. 효과·적합성 확정은 아닙니다.",
+    "check": "실제 나이·거주지·수급 요건·돌봄 필요도·중복 이용·현재 선정 기준 확인.",
+    "age_ranges": [
+      {
+        "min": 65,
+        "max": null
+      }
+    ],
+    "availability_status": "needs_confirmation",
+    "application_end": null,
+    "application_method": "주민등록상 주소지 읍면동 행정복지센터에 본인·가족 등이 신청 후 선정조사.",
+    "application_url": null,
+    "source": {
+      "type": "official_local_government",
+      "title": "춘천시 복지포털 · 노인맞춤돌봄서비스",
+      "url": "https://www.chuncheon.go.kr/new-welfare/Single-person/senior/comprehensive-care-service/",
+      "checked_at": "2026-10-16",
+      "page_updated_at": "2025-03-21",
+      "review_note": "공식 안내 페이지 확인. 현재 운영·모집 여부는 기관에 확인 필요."
+    }
+  },
+  {
+    "id": "cc-daily-care",
+    "region": "춘천시",
+    "name": "일상돌봄서비스",
+    "purpose": "daily",
+    "organization": "춘천시 · 복지정책과",
+    "description": "재가돌봄·가사·외출 지원과 병원동행·심리지원을 안내합니다.",
+    "eligibility": "안내상 돌봄 필요 청·중장년 19~64세 또는 가족돌봄청년 9~39세. 유형별 돌봄 필요성·돌봄자 부재 또는 동거가족 돌봄 증빙이 필요합니다. 소득에 따라 본인부담이 다릅니다.",
+    "format": "기관 상담·대상자 확인 후 연계",
+    "schedule": "안내상 수시 모집, 예산 소진 시 마감. 현재 예산·연령 기준 확인 필요.",
+    "reason": "선택한 지원 목적과 관련된 서비스 내용을 검토할 수 있습니다. 효과·적합성 확정은 아닙니다.",
+    "check": "2025년 안내 연령의 현행 적용 여부, 유형별 조건·증빙·본인부담·예산 확인.",
+    "age_ranges": [
+      {
+        "min": 19,
+        "max": 64
+      },
+      {
+        "min": 9,
+        "max": 39
+      }
+    ],
+    "availability_status": "needs_confirmation",
+    "application_end": null,
+    "application_method": "거주지 읍면동 행정복지센터 방문 신청. 증빙자료 등 구비서류 확인.",
+    "application_url": null,
+    "source": {
+      "type": "official_local_government",
+      "title": "춘천시 복지포털 · 일상돌봄서비스",
+      "url": "https://www.chuncheon.go.kr/new-welfare/Single-person/youth-old/care-service/",
+      "checked_at": "2026-10-16",
+      "page_updated_at": "2025-05-07",
+      "review_note": "2025년 수정 안내의 연령 기준을 수록. 2026년 적용 기준은 기관 재확인 필요."
+    }
+  },
+  {
+    "id": "cc-loneliness-prevention",
+    "region": "춘천시",
+    "name": "고독사 예방 사업",
+    "purpose": "connection",
+    "organization": "춘천시 · 통합돌봄과",
+    "description": "은둔청년의 회복 지원과 중장년 고립가구의 안부·생활 개선·사회관계망 지원을 안내합니다.",
+    "eligibility": "19~64세의 사회적 교류가 적은 은둔청년 또는 중장년 고립가구. 기관의 고독사 위험 판단도구에 따른 선정이 필요하며 소득 기준은 없다고 안내합니다.",
+    "format": "기관 상담·대상자 확인 후 연계",
+    "schedule": "안내상 상시 신청. 현재 운영과 선정 절차 확인 필요.",
+    "reason": "선택한 지원 목적과 관련된 서비스 내용을 검토할 수 있습니다. 효과·적합성 확정은 아닙니다.",
+    "check": "개인 상태·거주지·나이·기관 선정 확인. 프로젝트의 집단 위험 단계로 기관 선정을 대체할 수 없음.",
+    "age_ranges": [
+      {
+        "min": 19,
+        "max": 64
+      }
+    ],
+    "availability_status": "needs_confirmation",
+    "application_end": null,
+    "application_method": "주소지 읍면동 행정복지센터 방문·유선 상담. 연령 유형별 수행기관은 공식 안내 확인.",
+    "application_url": null,
+    "source": {
+      "type": "official_local_government",
+      "title": "춘천시 복지포털 · 고독사 예방",
+      "url": "https://www.chuncheon.go.kr/new-welfare/Single-person/youth-old/prevention-lonely-death/",
+      "checked_at": "2026-10-16",
+      "page_updated_at": "2025-06-18",
+      "review_note": "공식 안내 페이지 확인. 현재 운영·모집 여부는 기관에 확인 필요."
+    }
+  },
+  {
+    "id": "cc-milk-check",
+    "region": "춘천시",
+    "name": "우유배달(안부확인)서비스",
+    "purpose": "daily",
+    "organization": "춘천시 · 통합돌봄과",
+    "description": "우유 전달과 수령 여부 확인을 통한 안부 확인을 안내합니다.",
+    "eligibility": "65세 이상 독거노인 또는 중·장년 1인 고독사 위험 가구. 중·장년의 정확한 연령은 페이지에 미명시되어 있습니다.",
+    "format": "기관 상담·대상자 확인 후 연계",
+    "schedule": "안내상 주 2~3회 배달. 현재 정원·모집 일정은 확인 필요.",
+    "reason": "선택한 지원 목적과 관련된 서비스 내용을 검토할 수 있습니다. 효과·적합성 확정은 아닙니다.",
+    "check": "독거·위험 조건, 중장년 연령, 배달 가능 읍면동, 정원과 현재 사업 운영 확인.",
+    "age_ranges": [
+      {
+        "min": 65,
+        "max": null
+      },
+      {
+        "min": null,
+        "max": null
+      }
+    ],
+    "availability_status": "needs_confirmation",
+    "application_end": null,
+    "application_method": "주소지 읍면동 행정복지센터 문의 후 신청.",
+    "application_url": null,
+    "source": {
+      "type": "official_local_government",
+      "title": "춘천시 복지포털 · 우유배달(안부확인)서비스",
+      "url": "https://www.chuncheon.go.kr/new-welfare/Single-person/milk-delivery/",
+      "checked_at": "2026-10-16",
+      "page_updated_at": "2025-05-27",
+      "review_note": "공식 안내 페이지 확인. 현재 운영·모집 여부는 기관에 확인 필요."
+    }
+  },
+  {
+    "id": "gn-senior-care",
+    "region": "강남구",
+    "name": "노인맞춤돌봄서비스",
+    "purpose": "daily",
+    "organization": "강남구 · 어르신복지과",
+    "description": "일상 유지가 어려운 취약 어르신을 위한 직접 돌봄과 필요 자원 연계를 안내합니다.",
+    "eligibility": "65세 이상 기초생활수급자·차상위계층 또는 기초연금 수급자 대상 안내. 입원·시설 입소·유사 재가서비스 등 제외 조건을 별도로 확인해야 합니다.",
+    "format": "기관 상담·대상자 확인 후 연계",
+    "schedule": "최신 접수 기간과 제공 가능 여부는 주민센터 확인 필요.",
+    "reason": "선택한 지원 목적과 관련된 서비스 내용을 검토할 수 있습니다. 효과·적합성 확정은 아닙니다.",
+    "check": "페이지에 2025년 소득표와 과거 제도 표현 포함. 2026년 소득·중복·제외 기준은 기관 확인.",
+    "age_ranges": [
+      {
+        "min": 65,
+        "max": null
+      }
+    ],
+    "availability_status": "needs_confirmation",
+    "application_end": null,
+    "application_method": "대상자 주소지 동 주민센터에서 본인·가족·관계인이 신청.",
+    "application_url": null,
+    "source": {
+      "type": "official_local_government",
+      "title": "강남구 어르신 지원 · 노인맞춤돌봄서비스",
+      "url": "https://www.gangnam.go.kr/board/senior_support/list.do?mid=id02_01050501",
+      "checked_at": "2026-10-16",
+      "page_updated_at": null,
+      "review_note": "노인맞춤돌봄서비스 항목을 확인. 2025년 소득표 등 포함. 금액은 옮기지 않았으며 현행 요건 재확인 필요."
+    }
+  },
+  {
+    "id": "gn-counseling-voucher",
+    "region": "강남구",
+    "name": "정신건강 심리상담 바우처사업",
+    "purpose": "wellbeing",
+    "organization": "강남구보건소",
+    "description": "증빙서류 등을 갖춘 정서적 어려움이 있는 구민에게 전문 심리상담을 지원하는 사업을 안내합니다.",
+    "eligibility": "정서적 어려움과 의뢰서 등 인정 서류가 필요한 유형별 조건이 있습니다. 단일 대상 연령 제한은 안내에서 확정하지 않았으며 개인별 조건을 확인해야 합니다.",
+    "format": "기관 상담·대상자 확인 후 연계",
+    "schedule": "안내상 상담 8회, 바우처 생성 후 120일. 현재 모집·예산·이용 조건 확인 필요.",
+    "reason": "선택한 지원 목적과 관련된 서비스 내용을 검토할 수 있습니다. 효과·적합성 확정은 아닙니다.",
+    "check": "본인 이용 의사·증빙 유효기간·제외/중복 지원·소득별 본인부담·연령별 신청 방식 확인.",
+    "age_ranges": [
+      {
+        "min": null,
+        "max": null
+      }
+    ],
+    "availability_status": "needs_confirmation",
+    "application_end": null,
+    "application_method": "주민등록상 거주지 동 주민센터 방문. 안내상 19세 이상은 복지로 온라인 신청도 가능하며 증빙서류 필요.",
+    "application_url": null,
+    "source": {
+      "type": "official_local_government",
+      "title": "강남구보건소 · 정신건강 심리상담 바우처사업 안내",
+      "url": "https://health.gangnam.go.kr/web/business/mental/mind/sub01.do",
+      "checked_at": "2026-10-16",
+      "page_updated_at": null,
+      "review_note": "공식 안내 페이지 확인. 현재 운영·모집 여부는 기관에 확인 필요."
+    }
+  }
+]

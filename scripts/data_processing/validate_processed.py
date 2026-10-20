@@ -1,6 +1,5 @@
 """최종 특징의 계약과 값 보존을 검증하고 재현용 파일 해시를 기록한다."""
 from pathlib import Path
-import hashlib
 import json
 import platform
 from datetime import datetime, timezone
@@ -8,21 +7,13 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from data_contract import AGES, MONTHS, REGIONS, require_keys
+from data_contract import AGES, MONTHS, REGIONS, require_keys, file_hash
 from industry_classification import ALL_GROUPS, VERSION
 
 REPO = Path(__file__).resolve().parents[2]
 PROCESSED = REPO / "data" / "processed"
 MANIFEST = PROCESSED / "preprocessing_manifest.json"
 KEYS = ["월", "지역", "연령대"]
-
-
-def file_hash(path):
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def main():
@@ -74,11 +65,13 @@ def main():
     if spatial_report.exists():
         spatial = json.loads(spatial_report.read_text(encoding="utf-8"))
         boundary = REPO / "data" / "external" / "sgis" / spatial["boundary_file"]
-        spatial_script = Path(__file__).parent / "validate_region_boundaries.py"
+        spatial_script = Path(__file__).parent / "validate_regions.py"
         fresh = (boundary.exists()
                  and spatial["sha256"]["telecom_features"] == file_hash(PROCESSED / "telecom_features.csv")
                  and spatial["sha256"]["boundary_zip"] == file_hash(boundary)
-                 and spatial["sha256"]["script"] == file_hash(spatial_script))
+                 and spatial["sha256"]["script"] == file_hash(spatial_script)
+                 and spatial["sha256"].get("data_contract") == file_hash(Path(__file__).with_name("data_contract.py"))
+                 and spatial["sha256"].get("builder") == file_hash(Path(__file__).with_name("build_risk_features.py")))
         if fresh:
             spatial_status = ("EPSG:5179 가정으로 경계 대조 완료. 예외와 제공기관 CRS 확인은 별도 기록: "
                               + spatial["status"])

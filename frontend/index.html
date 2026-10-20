@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#184e40">
+  <title>이음케어 · 복지자원 추천</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 이동</a>
+  <header class="header">
+    <div class="header-inner">
+      <a class="brand" href="#dashboard" aria-label="이음케어 대시보드">
+        <span class="brand-mark" aria-hidden="true">🔗</span>
+        <span><strong>이음케어</strong><small>지역과 사람을 잇는 복지</small></span>
+      </a>
+      <span class="workspace"><span class="status-dot"></span>담당자 워크스페이스</span>
+    </div>
+    <nav class="navigation" aria-label="주요 메뉴">
+      <a href="#dashboard">대시보드</a>
+      <a href="#analysis">분석</a>
+      <a href="#recommendations">복지자원 추천</a>
+      <a href="#planning">프로그램 기획</a>
+      <a href="#evaluation">평가·예산</a>
+    </nav>
+  </header>
+  <main id="main" tabindex="-1">
+    <section id="empty-page" hidden aria-labelledby="empty-title">
+      <div class="page-heading"><div><p class="eyebrow">IEUM CARE</p><h1 id="empty-title">대시보드</h1></div></div>
+      <div class="empty-canvas" aria-label="아직 콘텐츠가 없는 화면"></div>
+    </section>
+    <section id="recommendation-page" hidden aria-labelledby="recommendation-title">
+      <div class="page-heading">
+        <div><p class="eyebrow">WELFARE CONNECTION</p><h1 id="recommendation-title">필요한 지원을, 알맞은 곳으로</h1><p class="subtitle">지역과 연령, 지원 목적에 맞는 복지자원을 살펴보고 연결하세요.</p></div>
+        <span class="page-label">복지자원 추천</span>
+      </div>
+      <div class="demo-notice"><span class="notice-icon" aria-hidden="true">i</span><p><strong>Tavily 검색과 Gemini 판단으로 복지자원을 추천합니다.</strong> 무료 등급 프로젝트의 키를 사용하세요. 추천 한 번에 기본 검색은 최대 2회입니다. 한도 초과 시 중단하며 다른 모델로 자동 전환하지 않습니다. 추천 결과와 신청 조건은 확인이 필요합니다.</p></div>
+      <details class="panel risk-input-panel">
+        <summary>위험도 결과 연결 · 팀 검토용 초안</summary>
+        <p class="muted">팀원 결과를 아래 초안 형식으로 맞춰 입력할 수 있습니다. 예시 입력은 실제 분석 결과가 아닙니다. 입력 후 추천 자원 조회를 눌러 반영하세요.</p>
+        <label for="risk-input">위험도 결과 JSON (선택)</label>
+        <textarea id="risk-input" rows="9" spellcheck="false" placeholder="비워두면 위험도 없이 일반 조회합니다."></textarea>
+        <div class="risk-input-actions"><button class="secondary" type="button" id="load-risk-example">예시 입력 채우기</button><button class="text-button" type="button" id="clear-risk-input">입력 지우기</button></div>
+      </details>
+      <div class="recommendation-layout">
+        <aside class="filters panel" aria-labelledby="filter-title">
+          <div class="section-heading"><span class="step-number">01</span><h2 id="filter-title">추천 대상 설정</h2></div>
+          <p class="muted filter-description">지원이 필요한 집단과 목적을 선택하세요.</p>
+          <form id="filter-form">
+            <label for="search-mode">추천 방식</label>
+            <select id="search-mode"><option value="live">실시간 검색 · AI 추천</option><option value="offline">저장 자료 조회 · 테스트용</option></select>
+            <p id="agent-status" class="muted" role="status">무료 등급 프로젝트의 키를 설정하면 추천을 실행할 수 있습니다.</p>
+            <label for="region">대상 지역</label>
+            <select id="region" name="region"><option value="춘천시">강원 춘천시</option><option value="강남구">서울 강남구</option></select>
+            <label for="age">대상 연령</label>
+            <select id="age" name="age"><option value="10">20대 미만</option><option value="20">20대</option><option value="30">30대</option><option value="40">40대</option><option value="50">50대</option><option value="60" selected>60대 이상</option></select>
+            <label for="purpose">지원 목적</label>
+            <select id="purpose" name="purpose"><option value="all">전체 목적</option><option value="connection">관계 형성·사회 참여</option><option value="daily">일상생활 지원</option><option value="wellbeing">정서·마음 돌봄</option><option value="economic">경제·생활 안정</option><option value="other">기타·통합 안내</option></select>
+            <fieldset class="support-needs"><legend>담당자가 확인한 지원 필요 (선택)</legend><p class="muted">알고 있는 추가 정보가 있으면 AI 판단의 참고 자료로 전달합니다. 선택하지 않아도 추천할 수 있습니다.</p><label><input type="checkbox" name="support-need" value="connection"> 관계 형성·사회 참여</label><label><input type="checkbox" name="support-need" value="daily"> 일상생활 지원</label><label><input type="checkbox" name="support-need" value="wellbeing"> 정서·마음 돌봄</label><label><input type="checkbox" name="support-need" value="economic"> 경제·생활 안정</label></fieldset>
+            <div class="context-note"><span aria-hidden="true">◎</span><div><strong>위험도 분석 연동 예정</strong><p>선택 집단과 연령이 일부 겹치거나 연령 기준이 미명시된 자원도 확인 후보로 표시합니다.</p></div></div>
+            <button class="primary full" type="submit">복지자원 추천받기 <span aria-hidden="true">→</span></button>
+          </form>
+          <div class="filter-footer"><span aria-hidden="true">↳</span> 추천은 지원 검토를 돕는 자료입니다.<br>실제 신청 자격은 제공 기관에서 확인하세요.</div>
+        </aside>
+        <div class="results-area">
+          <div class="results-header"><div><p class="eyebrow">맞춤 자원 탐색</p><h2 id="results-title"></h2></div><span id="result-count" class="count-badge"></span></div>
+          <p id="result-description" class="muted"></p>
+          <section id="review-context" class="panel review-context" aria-label="추천 판단과 추가 확인 사항" aria-live="polite" hidden></section>
+          <div id="results" class="resource-list" aria-live="polite"></div>
+          <section class="handoff panel" aria-labelledby="handoff-title">
+            <div class="handoff-heading"><span class="handoff-icon" aria-hidden="true">↗</span><div><h2 id="handoff-title">프로그램 기획 요청 준비</h2><p>기존 자원을 활용하거나, 자원 선택 없이 예방·신규 프로그램의 기획을 요청할 수 있습니다.</p></div></div>
+            <p id="planning-target" class="planning-target">먼저 대상 집단의 복지자원을 조회해주세요.</p>
+            <div id="response-routes" class="planning-lookup" aria-label="조회 상태와 기획 참고 사항" aria-live="polite" hidden></div>
+            <div id="selected-resources" class="selected-resources" aria-live="polite"></div>
+            <label for="planning-prompt">기획 담당자에게 전달할 요청 (선택)</label>
+            <textarea id="planning-prompt" rows="4" maxlength="2000" placeholder="예: 혼자 사는 어르신이 주 1회 이웃과 만날 수 있는 프로그램을 기획해주세요. 이동 부담이 적고 소규모로 운영하면 좋겠습니다." aria-describedby="planning-prompt-help"></textarea>
+            <p id="planning-prompt-help" class="muted">최대 2,000자. 원하는 활동·운영 방식·예산 등의 조건을 적어주세요.</p>
+            <div class="planning-actions"><button id="prepare-existing" class="secondary" type="button" disabled>선택 자원 활용 기획 요청 만들기</button><button id="prepare-preventive" class="primary" type="button" disabled>예방·신규 기획 요청 만들기</button></div>
+            <p id="planning-status" class="muted" role="status">조회 후 요청을 준비할 수 있습니다.</p>
+            <div id="planning-preview" hidden><p id="planning-summary"></p><details><summary>전달 데이터 보기</summary><pre id="planning-json"></pre></details></div>
+            <div class="handoff-bottom"><small>기획 Agent 연결 전 · JSON 파일을 팀원에게 전달하세요. 기획서 생성·자동 전송은 아직 지원하지 않습니다.</small><button id="download-planning" class="secondary" type="button" disabled>기획 요청 JSON 내려받기 <span aria-hidden="true">↓</span></button></div>
+          </section>
+        </div>
+      </div>
+      <footer class="page-footer">IEUM CARE <span>한 번의 추천이, 새로운 연결의 시작이 되도록.</span></footer>
+    </section>
+  </main>
+  <dialog id="resource-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div><form method="dialog"><button class="secondary full">닫기</button></form></dialog>
+</body>
+</html>

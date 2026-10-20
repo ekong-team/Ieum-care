@@ -1,0 +1,18 @@
+{
+  "schema_version": "target-profile-0.2",
+  "source": "manual",
+  "target": {"region": "춘천시", "age_group": 20, "sex": "all"},
+  "period": "2025-12",
+  "risk": {"level": 3, "status": "complete", "model_version": "example-not-production"},
+  "evidence": [
+    {"id": "E1", "name": "사회활동 관련 소비 건수 변화", "value": -0.083, "unit": "ratio", "period": "2025-12",
+     "description": "외식·카페·문화·운동 업종 결제 건수의 전월 대비 변화 (예시 값)", "source": "card",
+     "related_signal": "consumption_decline"},
+    {"id": "E2", "name": "연령 유동량 변화", "value": -0.041, "unit": "ratio", "period": "2025-12",
+     "description": "공통 위치 기준 20대 유동량의 전월 대비 변화 (예시 값)", "source": "telecom",
+     "related_signal": "movement_decline"}
+  ],
+  "signals": ["consumption_decline", "movement_decline"],
+  "limitations": ["예시 입력이며 실제 분석 결과가 아님", "집계 단위 신호로 개인의 고립을 뜻하지 않음"],
+  "is_example": true
+}

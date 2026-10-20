@@ -1,0 +1,516 @@
+{
+  "case_version": "welfare-review-cases-0.1",
+  "review_status": "draft_not_team_approved",
+  "description": "가상 집단 입력과 공식 자원 초기 목록을 사용한 동작 검증. 실제 고립 정답·추천 적합도·효과 검증 자료가 아님.",
+  "catalog_version": "official-seed-2026-10-16",
+  "cases": [
+    {
+      "id": "S01",
+      "title": "이동 감소는 관계 형성 확인 가설이며 자동 필터가 아님",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "complete",
+          "level": 3,
+          "signals": [
+            {
+              "type": "movement_decline",
+              "description": "사례 검증용 movement_decline 예시"
+            }
+          ],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-senior-care",
+          "cc-daily-care",
+          "cc-loneliness-prevention",
+          "cc-milk-check"
+        ],
+        "review_status": "needs_confirmation",
+        "suggested_purposes": [
+          "connection"
+        ],
+        "coverage_status": "candidates_found"
+      }
+    },
+    {
+      "id": "S02",
+      "title": "소비 감소만으로 생활·정서 지원 필요를 생성하지 않음",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 30,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 30,
+          "period": "2025-12",
+          "status": "complete",
+          "level": 3,
+          "signals": [
+            {
+              "type": "consumption_decline",
+              "description": "사례 검증용 consumption_decline 예시"
+            }
+          ],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-daily-care",
+          "cc-loneliness-prevention",
+          "cc-milk-check"
+        ],
+        "review_status": "needs_confirmation",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found",
+        "question_contains": [
+          "소비 감소",
+          "경제적 어려움"
+        ]
+      }
+    },
+    {
+      "id": "S03",
+      "title": "판정 보류는 1단계나 지원 불필요로 바꾸지 않음",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "held",
+          "level": null,
+          "signals": [
+            {
+              "type": "movement_decline",
+              "description": "사례 검증용 movement_decline 예시"
+            }
+          ],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-senior-care",
+          "cc-daily-care",
+          "cc-loneliness-prevention",
+          "cc-milk-check"
+        ],
+        "review_status": "risk_held",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found"
+      }
+    },
+    {
+      "id": "S04",
+      "title": "불완전 판정으로는 지원 가설을 만들지 않음",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "partial",
+          "level": 3,
+          "signals": [
+            {
+              "type": "movement_decline",
+              "description": "사례 검증용 movement_decline 예시"
+            }
+          ],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-senior-care",
+          "cc-daily-care",
+          "cc-loneliness-prevention",
+          "cc-milk-check"
+        ],
+        "review_status": "risk_partial",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found"
+      }
+    },
+    {
+      "id": "S05",
+      "title": "담당자가 관계 형성 지원 필요를 확인한 경우",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "complete",
+          "level": 3,
+          "signals": [
+            {
+              "type": "movement_decline",
+              "description": "사례 검증용 movement_decline 예시"
+            }
+          ],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": [
+          "connection"
+        ]
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-loneliness-prevention"
+        ],
+        "review_status": "ready_for_review",
+        "suggested_purposes": [
+          "connection"
+        ],
+        "coverage_status": "candidates_found",
+        "age_matches": {
+          "cc-loneliness-prevention": "partial"
+        }
+      }
+    },
+    {
+      "id": "S06",
+      "title": "담당자가 정서 지원 필요를 확인해도 개인 자격은 미판정",
+      "request": {
+        "target": {
+          "region": "강남구",
+          "age_group": 20,
+          "purpose": "all"
+        },
+        "risk_assessment": null,
+        "confirmed_support_needs": [
+          "wellbeing"
+        ]
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "gn-counseling-voucher"
+        ],
+        "review_status": "ready_for_review",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found",
+        "age_matches": {
+          "gn-counseling-voucher": "unknown"
+        }
+      }
+    },
+    {
+      "id": "S07",
+      "title": "지역의 수집 목록에 관계 형성 후보가 없는 경우",
+      "request": {
+        "target": {
+          "region": "강남구",
+          "age_group": 20,
+          "purpose": "connection"
+        },
+        "risk_assessment": null,
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [],
+        "review_status": "browse",
+        "suggested_purposes": [],
+        "coverage_status": "no_candidates_in_catalog"
+      }
+    },
+    {
+      "id": "S08",
+      "title": "다른 지역의 위험도 결과는 추천 전에 거절",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "강남구",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "complete",
+          "level": 3,
+          "signals": [],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": true
+      }
+    },
+    {
+      "id": "S09",
+      "title": "60대 이상 전체를 65세 이상 자격으로 처리하지 않음",
+      "request": {
+        "target": {
+          "region": "강남구",
+          "age_group": 60,
+          "purpose": "daily"
+        },
+        "risk_assessment": null,
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "gn-senior-care"
+        ],
+        "review_status": "browse",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found",
+        "age_matches": {
+          "gn-senior-care": "partial"
+        }
+      }
+    },
+    {
+      "id": "S10",
+      "title": "위험 1단계만으로 개인 필요·자격을 판정하지 않음",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "complete",
+          "level": 1,
+          "signals": [],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-senior-care",
+          "cc-daily-care",
+          "cc-loneliness-prevention",
+          "cc-milk-check"
+        ],
+        "review_status": "needs_confirmation",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found"
+      }
+    },
+    {
+      "id": "S11",
+      "title": "동일 신호에서 단계만 5로 바뀌어도 자원·자격은 같음",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "complete",
+          "level": 5,
+          "signals": [],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": []
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-senior-care",
+          "cc-daily-care",
+          "cc-loneliness-prevention",
+          "cc-milk-check"
+        ],
+        "review_status": "needs_confirmation",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found"
+      }
+    },
+    {
+      "id": "S12",
+      "title": "조회 목적과 확인한 지원 필요가 충돌하면 추가 확인",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "daily"
+        },
+        "risk_assessment": null,
+        "confirmed_support_needs": [
+          "connection"
+        ]
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-senior-care",
+          "cc-daily-care",
+          "cc-milk-check"
+        ],
+        "review_status": "needs_confirmation",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found",
+        "question_contains": [
+          "다릅니다"
+        ]
+      }
+    },
+    {
+      "id": "S13",
+      "title": "판정 보류여도 독립적으로 확인한 지원 필요는 반영",
+      "request": {
+        "target": {
+          "region": "춘천시",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": {
+          "schema_version": "risk-input-0.1",
+          "assessment_id": "scenario-example",
+          "region": "춘천시",
+          "age_group": 60,
+          "period": "2025-12",
+          "status": "held",
+          "level": null,
+          "signals": [
+            {
+              "type": "movement_decline",
+              "description": "사례 검증용 movement_decline 예시"
+            }
+          ],
+          "limitations": [
+            "연결 검증용 가상 사례로 실제 분석 결과가 아님"
+          ],
+          "model_version": "scenario-example-v1",
+          "is_example": true
+        },
+        "confirmed_support_needs": [
+          "connection"
+        ]
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "cc-loneliness-prevention"
+        ],
+        "review_status": "risk_held",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found"
+      }
+    },
+    {
+      "id": "S14",
+      "title": "지원 필요가 여럿이면 해당 목적들의 후보를 함께 탐색",
+      "request": {
+        "target": {
+          "region": "강남구",
+          "age_group": 60,
+          "purpose": "all"
+        },
+        "risk_assessment": null,
+        "confirmed_support_needs": [
+          "daily",
+          "wellbeing"
+        ]
+      },
+      "expected": {
+        "invalid_request": false,
+        "resource_ids": [
+          "gn-senior-care",
+          "gn-counseling-voucher"
+        ],
+        "review_status": "ready_for_review",
+        "suggested_purposes": [],
+        "coverage_status": "candidates_found"
+      }
+    }
+  ],
+  "rules_version": "support-review-0.2"
+}
