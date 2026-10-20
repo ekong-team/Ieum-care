@@ -11,6 +11,8 @@ __pycache__/
 
 # Environment
 .env
+.env.*
+!.env.analysis.example
 
 # Data
 data/raw/*

@@ -1,26 +1,33 @@
-# 수정 에이전트 개발 환경
+# 분석 에이전트 실행 환경
 
-2026-10-18 갱신: `.venv-agent`에 실제 LangGraph·SQLite 체크포인트·jsonschema를 설치하고 검증했다. 정확한 직접 의존성은 requirements-agent.txt, 전체 고정 버전은 requirements-agent-lock.txt. 최신 실행 안내는 study_revision_20261019.md와 revision_implementation_20261018.md를 우선한다. 아래 '설치하지 않았다'는 10월16일 당시 기록이다.
+Python3.12와 프로젝트 .venv-agent를 사용한다. 기존 .venv는 원본 분석·그래프·공간 패키지 기록이 있어 유지한다. 가상환경 자체를 Git이나 ZIP에 넣지 않는다.
 
-2026-10-16 구성·실행 확인. Python3.12.14, pip25.0.1, 프로젝트 `.venv-agent`.
-기존 `.venv`는 분석 패키지와 캐시를 보관하므로 보존한다. `.venv-agent`는 Git 제외다.
-
-## 실행 방법
-
-PowerShell에서 프로젝트 폴더로 이동한다.
+새 PC에서는 프로젝트 루트에서 다음처럼 만든다.
 
 ```powershell
-Set-Location 'C:/Users/namo2/Desktop/ai빅콘테스트/Ieum-care'
-& './.venv-agent/Scripts/python.exe' --version
-& './.venv-agent/Scripts/python.exe' -m pip --version
-& './.venv-agent/Scripts/python.exe' -m unittest discover -s tests -p test_revision_agent.py
+py -3.12 -m venv .venv-agent
+./.venv-agent/Scripts/python.exe -m pip install -r requirements-agent.txt
 ```
 
-환경의 Python을 직접 지정하므로 활성화 명령 없이 같은 환경으로 실행된다. 검증에서 테스트6개 통과.
-현재 외부 모델 SDK·LangGraph·LangChain·분석 패키지는 설치하지 않았다. 기본 수정 코드에 불필요한 의존성을 먼저 추가하지 않는다. pip check 성공은 현재 설치 패키지의 의존성 충돌이 없다는 뜻이며 모델 성능 검증은 아니다.
+requirements-agent.txt는 현재 분석 Agent의 검증된 직접 의존성이다. NumPy·Pandas도 포함하므로 성별 전처리와 Agent를 같은 환경에서 실행할 수 있다. 팀 공통 requirements.txt와 LangGraph/Pydantic의 정확한 고정 버전이 다르므로 두 목록을 한 번의 pip install에 동시에 넣지 않는다. 현재 환경의 전체 고정 버전은 requirements-agent-lock.txt다.
 
-## 재생성과 이번 오류
+기본 카드·통신/성별 전처리는 NumPy·Pandas를 사용한다. 과거 상세 보고서 재생성에는 matplotlib, 선택적 경계 검증에는 shapely·pyproj·pyshp가 추가로 필요하다. 그 환경은 requirements-analysis.txt와 팀 공통 requirements.txt를 참고해 별도로 구성한다. 일부 환경에서 공간 테스트를 생략했다는 것을 경계 검증 완료로 표현하지 않는다.
 
-현재 환경은 Codex 번들 Python을 기반으로 생성됐다. 다른 PC에서는 팀이 설치한 Python3.12의 경로를 사용해 새 환경을 만들고 필요 패키지 목록으로 구성한다. 이 폴더를 복사해 공유하지 않는다.
+설정 확인은 키 값을 노출하지 않는다.
 
-이번 생성은 ensurepip 기본 임시폴더 권한 오류로 일부만 생성된 후, 프로젝트 내부 임시폴더로 재시도해 완료했다. 상세 원인·사용자 선택·해결·검증은 troubleshooting.md의 ENV-002에 기록했다. 시스템의 실행 정책이나 권한은 바꾸지 않았다.
+```powershell
+./.venv-agent/Scripts/python.exe scripts/integration/run_analysis_agent.py --check-config
+./.venv-agent/Scripts/python.exe -m unittest discover -s tests -p "test_analysis*.py"
+```
+
+기본 임시폴더 권한 때문에 설치/테스트가 실패할 때는 프로젝트 안 임시폴더를 사용한다.
+
+```powershell
+New-Item -ItemType Directory -Force .venv-agent/test_tmp
+$env:TEMP=(Resolve-Path .venv-agent/test_tmp).Path
+$env:TMP=$env:TEMP
+```
+
+위 명령은 현재 프로세스의 임시 경로만 바꾼다. 시스템 권한을 변경하지 않는다. 과거 제안·사용자 선택·검증 경위는 troubleshooting.md에 실제 기여대로 기록한다.
+
+전체 데이터 흐름은 [한수 분석 처리 과정](hansu_analysis_pipeline.md)을 참고한다. 실제 API 호출은 명시적 옵션·설정·승인된 집단/횟수 범위를 확인한 뒤 수행한다.
