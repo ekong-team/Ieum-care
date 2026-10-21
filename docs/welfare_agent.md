@@ -127,10 +127,11 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 
 ```json
 {
-  "schema_version": "risk-input-0.1",
+  "schema_version": "risk-input-0.2",
   "assessment_id": "example-only",
   "region": "춘천시",
   "age_group": 60,
+  "sex": "female",
   "period": "2025-12",
   "status": "complete",
   "level": 3,
@@ -141,9 +142,15 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 }
 ```
 
-모든 필드를 요구한다. region·age_group은 target과 같아야 한다. period는 실제 달력의 YYYY-MM, status는 complete/partial/held이며 complete는 1~5 정수 level, held는 null level이다. partial은 알려진 하한 단계 또는 null을 허용한다. 신호 유형은 activity_decline/consumption_decline/movement_decline이며 설명 문자열과 함께 전달하고 유형을 중복하지 않는다. 모델 버전·분석 식별자·관측 제한과 예시 여부를 함께 보존한다. 값·필드·버전이 다르면 400으로 거절한다.
+모든 필드를 요구한다. region·age_group·sex는 target과 같아야 한다. sex는 all/male/female이며 0.2 요청의 target에도 반드시 포함한다. period는 실제 달력의 YYYY-MM, status는 complete/partial/held이며 complete는 1~5 정수 level, held는 null level이다. partial은 알려진 하한 단계 또는 null을 허용한다. 신호 유형은 activity_decline/consumption_decline/movement_decline이며 설명 문자열과 함께 전달하고 유형을 중복하지 않는다. 모델 버전·분석 식별자·관측 제한과 예시 여부를 함께 보존한다. 값·필드·버전이 다르면 400으로 거절한다.
 
-현재는 이 형식으로 직접 입력한다. 팀원의 CSV/JSON에 대한 자동 변환기나 데이터 재계산은 구현하지 않았다. 팀원 형식이 확정되면 별도 변환 지점을 마련한다. 입력을 비우면 위험도 없는 일반 조회로 돌아간다. 지역·연령을 바꾼 뒤 이전 집단의 위험도를 재사용하면 불일치 오류로 거절한다.
+화면에는 팀원 요청의 risk_assessment 부분만 직접 입력하고 지역·연령·성별을 같은 값으로 선택한다. HTTP API에는 팀원 request_v02 전체(target/risk_assessment/confirmed_support_needs)를 보낸다. ZIP/CSV 업로드·대상 자동 선택·데이터 재계산은 구현하지 않았다. 입력을 비우면 위험도 없는 일반 조회로 돌아간다. 지역·연령·성별을 바꾼 뒤 이전 집단의 위험도를 재사용하면 불일치 오류로 거절한다.
+
+2026-10-22 수신부 변경: 생산자 `WelfareRequest02` 계약으로 성별을 검사하고, 공통 그래프의 `to_welfare_payload`도 0.2를 만든다. 기존 risk-input-0.1은 성별 없는 남녀 합산 입력만 지원한다(새 target.sex가 all인 경우도 허용). 남녀별 입력에서 성별을 제거하거나 all로 자동 변환하지 않는다. 위험도 없는 일반 조회에는 선택적인 target.sex를 허용한다. 연령 코드10은 전 경로에서 10~19세이며 10세 미만 전용 자원과는 연령이 겹치지 않는다.
+
+성별은 Gemini 판단 맥락·추천 응답·기획 요청 JSON에 보존한다. 기본 Tavily 검색은 지역·연령·목적 기준을 유지하며, 성별만으로 욕구·질환·경제 상태나 자격을 추정하지 않는다. 저장 목록에는 성별 자격 구조가 없으므로 성별로 자동 제외하지 않는다. 실제 성별 제한은 공식 근거와 기관 확인이 필요하다. 생산자의 상세 handoff analysis_context와 공통 welfare-context-0.1은 다른 구조다. 상세 객체 전체를 같은 이름으로 전송하지 않는다.
+
+2026-10-22 연결 검사: 제공받은 `hansu_to_hyeonji_20261019_6d5304bcb1eefb32.zip`의 request_v02 216건을 저장 자료 조회 함수로 검사했다. 대상·위험도 원문을 모두 보존했으며 complete 173건 / partial 7건 / held 36건이었다. 이 검사는 10월19일 묶음의 수신 호환성 확인이며 최신 분석 결과 재계산이나 추천 품질 검증이 아니다. 관련 Python 회귀 검사 135개와 화면 로직 검사 8개가 통과했다. 실시간 경로는 가짜 검색·Gemini 응답으로 검사했고 외부 API는 호출하지 않았다.
 
 ## 저장 자료 테스트 모드의 추천 기준과 검증 사례
 

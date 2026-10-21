@@ -15,8 +15,9 @@ const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&
 const $ = (selector) => document.querySelector(selector);
 const pages = { dashboard: '대시보드', analysis: '분석', recommendations: '복지자원 추천', planning: '프로그램 기획', evaluation: '평가·예산' };
 const selected = new Set();
-let filters = { region: '춘천시', age: 60, purpose: 'all' };
-const ageLabel = (age) => age === 60 ? '60대 이상' : age === 10 ? '20대 미만' : `${age}대`;
+let filters = { region: '춘천시', age: 60, sex: 'all', purpose: 'all' };
+const ageLabel = (age) => age === 60 ? '60대 이상' : age === 10 ? '10대 (10~19세)' : `${age}대`;
+const sexLabel = (sex) => ({all:'남녀 합산',male:'남성',female:'여성'})[sex || 'all'];
 const purposeLabels = { all: '전체 목적', connection: '관계 형성·사회 참여', daily: '일상생활 지원', wellbeing: '정서·마음 돌봄', economic: '경제·생활 안정', other: '기타·통합 안내' };
 
 const relevanceLabels = { direct: '고립 예방과 직접 연관', indirect: '일반 생활 지원 · 간접 연관', uncertain: '고립 예방 연관성 확인 필요' };
@@ -68,7 +69,7 @@ function navigate() {
 
 function renderResults() {
   const matches = resources;
-  $('#results-title').textContent = `${filters.region} · ${ageLabel(filters.age)}`;
+  $('#results-title').textContent = `${filters.region} · ${ageLabel(filters.age)} · ${sexLabel(filters.sex)}`;
   $('#result-count').textContent = loading ? '조회 중' : errorMessage ? '연결 확인 필요' : !recommendation ? '조회 전' : `확인 후보 ${matches.length}개`;
   $('#result-description').textContent = !recommendation ? '지역·연령·지원 목적을 선택하고 복지자원을 추천받으세요.'
     : recommendation.mode === 'offline' ? '저장된 자료 조회 테스트입니다. 외부 검색·LLM을 실행하지 않았습니다.'
@@ -113,7 +114,7 @@ function renderReview() {
   panel.innerHTML = `<h3>${escape(status[review.status])}</h3>
     ${review.input_note || !risk ? `<p class="input-basis">${escape(review.input_note || '위험도 분석 결과가 연결되지 않아 지역·연령·지원 목적을 기준으로 조회했습니다.')}</p>` : ''}
     ${review.summary ? `<p><strong>AI 추천 판단</strong><br>${escape(review.summary)}</p>` : ''}
-    ${risk ? `<p><strong>${risk.is_example ? '예시 위험도 입력 · 실제 분석 결과 아님' : '입력받은 위험도 결과 · 자동 수신 전'}</strong><br>${escape(risk.period)} · ${escape(risk.region)} · ${escape(ageLabel(risk.age_group))} · ${risk.level === null ? '단계 보류' : `${escape(risk.level)}단계`}<br>모델: ${escape(risk.model_version)}</p><ul>${risk.signals.map((signal) => `<li>${escape(signal.description)}</li>`).join('')}${risk.limitations.map((text) => `<li>관측 제한: ${escape(text)}</li>`).join('')}</ul>` : ''}
+    ${risk ? `<p><strong>${risk.is_example ? '예시 위험도 입력 · 실제 분석 결과 아님' : '입력받은 위험도 결과 · 자동 수신 전'}</strong><br>${escape(risk.period)} · ${escape(risk.region)} · ${escape(ageLabel(risk.age_group))} · ${escape(sexLabel(risk.sex))} · ${risk.level === null ? '단계 보류' : `${escape(risk.level)}단계`}<br>모델: ${escape(risk.model_version)}</p><ul>${risk.signals.map((signal) => `<li>${escape(signal.description)}</li>`).join('')}${risk.limitations.map((text) => `<li>관측 제한: ${escape(text)}</li>`).join('')}</ul>` : ''}
     ${review.confirmed_support_needs.length ? `<p>담당자가 확인한 필요: ${review.confirmed_support_needs.map((purpose) => escape(recommendation.purposes[purpose])).join(' · ')}</p>` : ''}
     ${review.suggested_purposes.map((item) => `<p><strong>확인해볼 목적: ${escape(recommendation.purposes[item.purpose])}</strong><br>${escape(item.reason)}</p>`).join('')}
     ${recommendation.exclusion_counts && Object.keys(recommendation.exclusion_counts).length ? `<p class="muted">검토에서 제외된 후보: ${Object.entries(recommendation.exclusion_counts).map(([key, count]) => `${escape(({source_not_grounded:'검색 출처 미일치',region_mismatch:'지역 불일치',closed:'종료 확인',purpose_mismatch:'지원 목적 불일치',age_mismatch:'연령 불일치',duplicate:'중복'})[key] || '기타 사유')} ${escape(count)}개`).join(' · ')}</p>` : ''}
@@ -151,7 +152,7 @@ function updatePlanningControls() {
   $('#prepare-existing').disabled = !ready || !count || !recommendation;
   $('#prepare-preventive').disabled = !ready;
   $('#planning-target').textContent = planningContext
-    ? `최근 조회 기준: ${planningContext.input.target.region} · ${ageLabel(planningContext.input.target.age_group)} · ${purposeLabels[planningContext.input.target.purpose]}`
+    ? `최근 조회 기준: ${planningContext.input.target.region} · ${ageLabel(planningContext.input.target.age_group)} · ${sexLabel(planningContext.input.target.sex)} · ${purposeLabels[planningContext.input.target.purpose]}`
     : '먼저 대상 집단의 복지자원을 조회해주세요.';
   $('#planning-status').textContent = !ready ? '조회 후 요청을 준비할 수 있습니다.'
     : count ? `${count}개 자원이 선택되어 있습니다. 기획 방식을 선택해주세요.`
@@ -188,7 +189,7 @@ function preparePlanningRequest(planningType) {
   clearPlanningPreview();
   try {
     preparedPlanningRequest = buildPlanningRequest(planningType);
-    $('#planning-summary').textContent = `${preparedPlanningRequest.target.region} · ${ageLabel(preparedPlanningRequest.target.age_group)} / ${planningType === 'existing_resource_based' ? '기존 자원 활용' : '예방·신규 기획'} / 선택 자원 ${preparedPlanningRequest.selected_resources.length}개`;
+    $('#planning-summary').textContent = `${preparedPlanningRequest.target.region} · ${ageLabel(preparedPlanningRequest.target.age_group)} · ${sexLabel(preparedPlanningRequest.target.sex)} / ${planningType === 'existing_resource_based' ? '기존 자원 활용' : '예방·신규 기획'} / 선택 자원 ${preparedPlanningRequest.selected_resources.length}개`;
     $('#planning-json').textContent = JSON.stringify(preparedPlanningRequest, null, 2);
     $('#planning-preview').hidden = false;
     $('#download-planning').disabled = false;
@@ -198,7 +199,7 @@ function preparePlanningRequest(planningType) {
 
 async function queryResources() {
   if (loading || Date.now() < retryAvailableAt) return;
-  filters = { region: $('#region').value, age: Number($('#age').value), purpose: $('#purpose').value };
+  filters = { region: $('#region').value, age: Number($('#age').value), sex: $('#sex').value, purpose: $('#purpose').value };
   requestedMode = $('#search-mode').value;
   loading = true;
   recommendation = null;
@@ -219,7 +220,7 @@ async function queryResources() {
     let risk = null;
     try { risk = $('#risk-input').value.trim() ? JSON.parse($('#risk-input').value) : null; }
     catch { throw new Error('위험도 JSON 형식이 올바르지 않습니다. 예시 입력과 비교해주세요.'); }
-    const input = { target: { region: filters.region, age_group: filters.age, purpose: filters.purpose }, risk_assessment: risk,
+    const input = { target: { region: filters.region, age_group: filters.age, sex: filters.sex, purpose: filters.purpose }, risk_assessment: risk,
       confirmed_support_needs: [...document.querySelectorAll('[name="support-need"]:checked')].map((input) => input.value) };
     const response = await fetch('/api/welfare/recommendations', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -283,8 +284,8 @@ $('#results').addEventListener('click', (event) => {
 
 $('#load-risk-example').addEventListener('click', () => {
   // 선택 집단에 맞춘 연결 검증용 예시이며 실제 분석 수치나 결과를 만들지 않는다.
-  $('#risk-input').value = JSON.stringify({ schema_version: 'risk-input-0.1', assessment_id: 'example-only',
-    region: $('#region').value, age_group: Number($('#age').value), period: '2025-12',
+  $('#risk-input').value = JSON.stringify({ schema_version: 'risk-input-0.2', assessment_id: 'example-only',
+    region: $('#region').value, age_group: Number($('#age').value), sex: $('#sex').value, period: '2025-12',
     status: 'complete', level: 3, model_version: 'example-model-not-production', is_example: true,
     signals: [{type:'movement_decline', description:'이동 감소 신호를 받았다고 가정한 연결 검증 예시입니다.'},
       {type:'consumption_decline', description:'소비 감소 신호를 받았다고 가정한 연결 검증 예시입니다.'}],
@@ -293,7 +294,7 @@ $('#load-risk-example').addEventListener('click', () => {
 });
 $('#clear-risk-input').addEventListener('click', () => { $('#risk-input').value = ''; });
 // 다른 집단으로 바꿀 때 이전 집단에서 확인한 지원 필요를 그대로 적용하지 않는다.
-for (const selector of ['#region', '#age']) {
+for (const selector of ['#region', '#age', '#sex']) {
   $(selector).addEventListener('change', () => {
     document.querySelectorAll('[name="support-need"]').forEach((input) => { input.checked = false; });
   });

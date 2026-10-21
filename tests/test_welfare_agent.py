@@ -283,6 +283,19 @@ class WelfareApiTests(unittest.TestCase):
         self.assertEqual([route["route"] for route in result["response_routing"]["routes"]],
                          ["existing_resource_linkage", "preventive_planning", "further_review"])
 
+    def test_http_v02_preserves_producer_sex_and_assessment(self):
+        from tests.test_welfare_v02 import producer_requests
+        for sex in ('all', 'male', 'female'):
+            for request in producer_requests(sex):
+                status, content = self.request('POST', '/api/welfare/recommendations', json.dumps(request))
+                self.assertEqual(status, 200)
+                result = json.loads(content)
+                self.assertEqual(result['target'], request['target'])
+                self.assertEqual(result['risk_assessment'], request['risk_assessment'])
+        request = list(producer_requests('female'))[-1]
+        request['risk_assessment']['sex'] = 'male'
+        self.assertEqual(self.request('POST', '/api/welfare/recommendations', json.dumps(request))[0], 400)
+
     def test_http_empty_candidates_keep_prevention_separate_from_failure(self):
         payload = {"mode": "live", "target": {"region": "춘천시", "age_group": 60, "purpose": "all"}}
         with patch('backend.server.recommend_live', return_value={"resources": [], "warnings": []}) as live:

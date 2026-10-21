@@ -26,6 +26,7 @@ function screen() {
   vm.runInContext(readFileSync(require('node:path').join(__dirname, '../frontend/app.js'), 'utf8'), context);
   element('#region').value = '춘천시';
   element('#age').value = '60';
+  element('#sex').value = 'all';
   element('#purpose').value = 'all';
   element('#search-mode').value = 'offline';
   return { element, context };
@@ -93,7 +94,7 @@ test('HTTP 실패는 조회 미완료로 표시하고 잘못된 다음 요청에
 function withPlanningData() {
   const result = screen();
   vm.runInContext(`
-    planningContext = { input: { target: {region:'춘천시',age_group:60,purpose:'connection'},
+    planningContext = { input: { target: {region:'춘천시',age_group:60,sex:'female',purpose:'connection'},
       risk_assessment: {is_example:true,level:1,status:'complete',limitations:['예시']},
       confirmed_support_needs:['connection'] }, mode:'offline', error:null };
     resources = [{id:'R1', name:'참고 자원',source:{url:'https://example.test/detail',reference_year:2025}}, {id:'R2',name:'다른 후보'}];
@@ -110,6 +111,7 @@ test('선택 자원 활용 요청은 대상·근거·출처를 보존하고 복�
   element('#region').value = '강남구'; // 조회 뒤 폼만 바꿔도 이전 조회 맥락과 섞지 않는다.
   const payload = vm.runInContext("selected.add('R1'); buildPlanningRequest('existing_resource_based')", context);
   assert.equal(payload.target.region, '춘천시');
+  assert.equal(payload.target.sex, 'female');
   assert.equal(payload.officer_prompt, '주 1회 만남, 예산 100만원');
   assert.equal(payload.selected_resources.length, 1);
   assert.equal(payload.selected_resources[0].source.reference_year, 2025);
@@ -160,4 +162,28 @@ test('미리보기 JSON을 내려받고 요청 수정·선택 변경 시 이전 
   element('#prepare-preventive').handlers.click();
   assert.equal(element('#planning-preview').hidden, true);
   assert.ok(element('#planning-status').textContent.includes('2,000자'));
+});
+
+test('0.2 성별을 API 요청과 기획 파일에 보존한다', async () => {
+  const { context, element } = screen();
+  element('#sex').value = 'female';
+  const risk = {schema_version:'risk-input-0.2',assessment_id:'female-test',region:'춘천시',age_group:60,sex:'female',
+    period:'2025-12',status:'held',level:null,signals:[],limitations:['전월 비교 불가'],model_version:'test',is_example:true};
+  element('#risk-input').value = JSON.stringify(risk);
+  let received;
+  context.fetch = async (_, options) => {
+    received = JSON.parse(options.body);
+    return {ok:true,headers:{get:()=> 'application/json'},json:async()=> ({schema_version:'welfare-0.4',is_demo:false,mode:'offline',
+      target:received.target,risk_assessment:received.risk_assessment,resources:[],purposes:{},has_example_context:true,
+      review:{confirmed_support_needs:[],summary:'',suggested_purposes:[],questions:[]},response_routing:route('no_candidates_found')})};
+  };
+  await vm.runInContext('queryResources()', context);
+  assert.equal(received.target.sex, 'female');
+  assert.deepEqual(received.risk_assessment, risk);
+  element('#prepare-preventive').handlers.click();
+  const payload = JSON.parse(element('#planning-json').textContent);
+  assert.equal(payload.target.sex, 'female');
+  assert.deepEqual(payload.risk_assessment, risk);
+  assert.equal(payload.has_example_context, true);
+  assert.ok(element('#results-title').textContent.includes('여성'));
 });

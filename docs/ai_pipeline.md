@@ -79,6 +79,8 @@ ai/nodes/       노드별 계산 (그래프는 이 함수들을 Engines로 꽂�
 
 ### 호출 기록
 
+2026-10-22: 공통 프로필 변환은 `risk-input-0.2`로 갱신했다. target.sex와 risk_assessment.sex를 보존하고 수신부에서 프로필과 일치 여부를 검사한다. 기존 0.1 합산 요청도 계속 지원한다. 분석 담당자의 `request_v02`는 복지 HTTP API에 직접 전달할 수 있으며, 상세 handoff 객체 전체를 보내는 기능은 추가하지 않았다.
+
 기본 live 경로는 recommend_live(..., on_external_call=ctx.count)를 사용한다. Tavily는 메모리 캐시 확인 뒤 HTTP 요청 직전, Gemini도 HTTP 요청 직전에 콜백을 실행한다. 요청 전 검증 실패는 0회, 캐시 적중은 검색 0회, 검색 확장은 최대 2회, 실패한 HTTP 요청도 시도한 횟수에 포함한다. 이 값은 청구 크레딧이나 토큰 사용량이 아니라 요청 시도 수다.
 
 response_call/tavily_search를 재사용하는 다른 노드는 on_external_call=ctx.count를 선택적으로 전달할 수 있다. 이 방식을 쓸 때 기존 ctx.count를 별도로 더하면 중복 집계된다. 테스트용 live_call/offline_call 주입 함수는 실제 요청을 하지 않는 한 횟수를 늘리지 않는다. 실제 호출하는 커스텀 구현은 자체적으로 계측해야 한다.
