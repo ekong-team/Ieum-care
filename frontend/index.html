@@ -40,6 +40,8 @@
       <section class="panel analysis-input-panel" aria-labelledby="analysis-input-title">
         <div class="results-header"><h2 id="analysis-input-title">분석 결과 · 1차 우선 대상</h2><button id="load-analysis" class="secondary" type="button">최신 분석 불러오기</button></div>
         <p id="analysis-input-status" class="muted" role="status">분석 결과 연결을 확인하고 있습니다.</p>
+        <p id="analysis-storage-status" class="muted" role="status">추천 결과는 이 브라우저에 저장합니다. 공유 PC에서는 사용 후 저장 결과를 지워주세요.</p>
+        <button id="clear-analysis-storage" class="text-button" type="button">이 브라우저의 추천 결과 지우기</button>
         <div id="analysis-targets" class="analysis-targets"></div>
         <div class="planning-actions"><button id="run-analysis-recommendations" class="primary" type="button" disabled>1차 대상 순서대로 복지 추천</button><button id="stop-analysis-recommendations" class="secondary" type="button" disabled>현재 요청 후 중지</button></div>
         <p class="muted">단계·순위·근거는 분석 결과를 그대로 사용합니다. 실시간 추천은 아래 추천 방식으로 실행하며, 집단당 검색 최대 2회·Gemini 1회를 사용합니다. 집단 선택은 상세 보기용입니다.</p>

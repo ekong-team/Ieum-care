@@ -9,7 +9,57 @@ let analysisInputs = null;
 let connectedAnalysisEntry = null;
 let analysisBatchRunning = false;
 let analysisStopRequested = false;
-const analysisResults = new Map(); // 이번 화면 세션의 완료 결과를 재사용한다.
+const analysisResults = new Map(); // 같은 배치의 브라우저 저장 결과와 현재 조회를 재사용한다.
+const ANALYSIS_STORAGE_KEY = 'ieum-welfare-results-v1';
+
+function persistAnalysisResults() {
+  if (!analysisInputs) return;
+  try {
+    // 현재 배치만 보관한다. API 키·담당자 기획 프롬프트·선택 목록은 저장하지 않는다.
+    const entries = analysisInputs.entries.flatMap((entry) => ['live', 'offline'].flatMap((mode) => {
+      const record = analysisResults.get(`${mode}:${entry.analysis_id}`);
+      return record ? [{analysis_id: entry.analysis_id, mode, request_signature: JSON.stringify(entry.request), record}] : [];
+    }));
+    localStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify({version: 1, batch_id: analysisInputs.batch_id, entries}));
+    $('#analysis-storage-status').textContent = '이 브라우저에 추천 결과 저장됨 · 새로고침 후 같은 분석 배치에서 복원합니다. 최신 운영 여부는 다시 확인해주세요.';
+  } catch {
+    $('#analysis-storage-status').textContent = '브라우저에 저장하지 못했습니다. 현재 화면에서는 계속 확인할 수 있지만 새로고침하면 결과가 사라질 수 있습니다.';
+  }
+}
+
+function restoreAnalysisResults() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(ANALYSIS_STORAGE_KEY) || 'null');
+    if (!stored || stored.version !== 1 || stored.batch_id !== analysisInputs.batch_id || !Array.isArray(stored.entries)) return;
+    let restored = 0;
+    for (const saved of stored.entries) {
+      const entry = analysisInputs.entries.find((item) => item.analysis_id === saved.analysis_id);
+      const record = saved.record;
+      if (!entry || !['live', 'offline'].includes(saved.mode) || saved.request_signature !== JSON.stringify(entry.request)
+          || !record || typeof record !== 'object') continue;
+      const result = record.recommendation;
+      // 로컬 저장소의 오래된 형식·손상 자료를 정상 응답으로 재사용하지 않는다.
+      if (result && (result.schema_version !== 'welfare-0.4' || result.is_demo !== false || result.mode !== saved.mode
+          || !Array.isArray(result.resources) || !result.review
+          || JSON.stringify(result.risk_assessment) !== JSON.stringify(entry.request.risk_assessment)
+          || JSON.stringify(result.analysis_context) !== JSON.stringify(entry.request.analysis_context))) continue;
+      if (!result && typeof record.errorMessage !== 'string') continue;
+      if (!record.filters || record.filters.region !== entry.request.target.region
+          || record.filters.age !== entry.request.target.age_group || record.filters.sex !== entry.request.target.sex
+          || record.filters.purpose !== entry.request.target.purpose) continue;
+      if (record.planningContext && (record.planningContext.mode !== saved.mode
+          || !record.planningContext.input
+          || ['region', 'age_group', 'sex', 'purpose'].some((key) => record.planningContext.input.target?.[key] !== entry.request.target[key])
+          || ['risk_assessment', 'analysis_context', 'confirmed_support_needs'].some((key) =>
+            JSON.stringify(record.planningContext.input[key]) !== JSON.stringify(entry.request[key])))) continue;
+      const key = `${saved.mode}:${entry.analysis_id}`;
+      if (!analysisResults.has(key)) { analysisResults.set(key, record); restored++; }
+    }
+    $('#analysis-storage-status').textContent = `${restored}건의 브라우저 저장 결과를 복원했습니다. 추가 검색·AI 호출은 하지 않았습니다. 최신 운영 여부는 다시 확인해주세요.`;
+  } catch {
+    $('#analysis-storage-status').textContent = '브라우저 저장 결과를 읽지 못했습니다. 현재 분석 입력으로 새로 조회할 수 있습니다.';
+  }
+}
 let loading = false;
 let errorMessage = '';
 let requestedMode = 'live';
@@ -274,7 +324,8 @@ async function queryResources() {
     $('#clear-risk-input').disabled = false;
     renderResults();
     if (analysisResultKey) {
-      analysisResults.set(analysisResultKey, {recommendation, responseRouting, planningContext, errorMessage, filters: {...filters}});
+      analysisResults.set(analysisResultKey, {recommendation, responseRouting, planningContext, errorMessage, filters: {...filters}, saved_at: new Date().toISOString()});
+      persistAnalysisResults();
       renderAnalysisInputs();
       if (!analysisBatchRunning && analysisInputs) {
         const done = analysisInputs.entries.filter((entry) => analysisResults.get(`${requestedMode}:${entry.analysis_id}`)?.recommendation).length;
@@ -315,6 +366,7 @@ function buildSecondReview() {
       analysis_id: entry.analysis_id, first_priority_rank: entry.rank,
       target: entry.request.target, risk_assessment: entry.request.risk_assessment,
       lookup_status: status, candidate_count: result ? candidates.length : null,
+      saved_at: saved?.saved_at || null,
       // AI의 연관성 분류이며 효과 검증이나 담당자 확인을 대신하지 않는다.
       ai_direct_relevance_count: result && mode === 'live'
         ? candidates.filter((item) => item.isolation_relevance === 'direct').length : null,
@@ -365,6 +417,7 @@ async function loadAnalysisInputs() {
     if (data.schema_version !== 'analysis-welfare-inputs-0.1' || !Array.isArray(data.entries)) throw new Error('분석 연결 응답 형식을 확인해주세요.');
     if (analysisInputs?.batch_id !== data.batch_id) { analysisResults.clear(); connectedAnalysisEntry = null; }
     analysisInputs = data;
+    restoreAnalysisResults();
     $('#analysis-input-status').textContent = `${data.period} · 완료 판정 ${data.entries.length}집단 · 부분판정 ${data.priority.partial_assessments.length}집단 · 보류 ${data.priority.held_cohorts.length}집단. 전체 실시간 실행은 최대 검색 ${data.entries.length * 2}회·Gemini ${data.entries.length}회입니다. 버튼을 눌러 순서대로 실행하세요.`;
   } catch (error) {
     analysisInputs = null;
@@ -407,7 +460,7 @@ async function runAnalysisRecommendations() {
       if (!success) { analysisStopRequested = true; break; } // 오류·한도 초과 시 자동 재시도하지 않는다.
     }
     const done = entries.filter((entry) => analysisResults.get(`${mode}:${entry.analysis_id}`)?.recommendation).length;
-    $('#analysis-input-status').textContent = `${entries.length}집단 중 ${done}집단 추천 완료${analysisStopRequested ? ' · 중지됨. 실행 버튼으로 미완료 집단만 다시 처리할 수 있습니다.' : ''} · 결과는 현재 화면 세션에서 보관합니다.`;
+    $('#analysis-input-status').textContent = `${entries.length}집단 중 ${done}집단 추천 완료${analysisStopRequested ? ' · 중지됨. 실행 버튼으로 미완료 집단만 다시 처리할 수 있습니다.' : ''} · 브라우저 저장 상태는 위 안내를 확인해주세요.`;
   } finally {
     analysisBatchRunning = false;
     renderAnalysisInputs();
@@ -415,6 +468,20 @@ async function runAnalysisRecommendations() {
 }
 
 $('#load-analysis').addEventListener('click', loadAnalysisInputs);
+$('#clear-analysis-storage').addEventListener('click', () => {
+  if (loading || analysisBatchRunning) return;
+  try {
+    localStorage.removeItem(ANALYSIS_STORAGE_KEY);
+    analysisResults.clear();
+    recommendation = null; responseRouting = null; planningContext = null;
+    resources = []; selected.clear(); errorMessage = '';
+    $('#planning-prompt').value = '';
+    renderResults(); renderAnalysisInputs();
+    $('#analysis-storage-status').textContent = '이 브라우저의 추천 결과를 지웠습니다. 다시 실시간 조회하면 API를 호출합니다.';
+  } catch {
+    $('#analysis-storage-status').textContent = '저장 결과를 지우지 못했습니다. 브라우저의 사이트 데이터 설정을 확인해주세요.';
+  }
+});
 $('#run-analysis-recommendations').addEventListener('click', runAnalysisRecommendations);
 $('#stop-analysis-recommendations').addEventListener('click', () => { analysisStopRequested = true; });
 function showAnalysisResult(event) {
@@ -422,7 +489,8 @@ function showAnalysisResult(event) {
   if (!button || loading || analysisBatchRunning) return;
   const entry = analysisInputs.entries[Number(button.dataset.analysisIndex)];
   useAnalysisEntry(entry);
-  const saved = analysisResults.get(`${$('#search-mode').value}:${entry.analysis_id}`);
+  requestedMode = $('#search-mode').value;
+  const saved = analysisResults.get(`${requestedMode}:${entry.analysis_id}`);
   recommendation = saved?.recommendation || null;
   responseRouting = saved?.responseRouting || null;
   planningContext = saved?.planningContext || null;

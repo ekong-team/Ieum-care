@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 
-function screen() {
+function screen(storage = new Map()) {
   const elements = new Map();
   function element(selector) {
     if (!elements.has(selector)) elements.set(selector, {
@@ -17,6 +17,7 @@ function screen() {
     return elements.get(selector);
   }
   const context = vm.createContext({
+    localStorage: {getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key)},
     document: { querySelector: element, querySelectorAll: () => [], title: '', createElement: () => element('created-element') },
     location: { hash: '#recommendations' }, window: { addEventListener() {} },
     AbortSignal, setInterval, clearInterval, crypto: require('node:crypto').webcrypto, Blob,
@@ -260,4 +261,56 @@ test('2차 검토는 0개·실패·미조회와 실행 방식을 구분하며 �
   assert.equal(vm.runInContext('buildSecondReview().comparison_complete', context), true);
   vm.runInContext('analysisInputs=null; renderSecondReview()', context);
   assert.equal(element('#second-review').hidden, true);
+});
+
+const storageFixture = `analysisInputs={batch_id:'persist-batch',entries:[{analysis_id:'female',rank:1,request:{
+  target:{region:'춘천시',age_group:30,sex:'female',purpose:'all'},confirmed_support_needs:[],
+  risk_assessment:{level:4,period:'2025-12'},analysis_context:{profile:{target:{sex:'female'}}}}}]};
+  analysisResults.set('live:female',{recommendation:{schema_version:'welfare-0.4',is_demo:false,mode:'live',
+    resources:[],review:{},risk_assessment:analysisInputs.entries[0].request.risk_assessment,
+    analysis_context:analysisInputs.entries[0].request.analysis_context},
+    filters:{region:'춘천시',age:30,sex:'female',purpose:'all'},saved_at:'2026-10-22T00:00:00Z'});
+  analysisResults.set('offline:female',{recommendation:null,errorMessage:'테스트 실패',
+    filters:{region:'춘천시',age:30,sex:'female',purpose:'all'}});`;
+
+test('다른 화면 세션에서 같은 배치·조건의 성공 0개와 실패를 API 호출 없이 복원하고 지운다', async () => {
+  const storage = new Map();
+  const first = screen(storage);
+  await new Promise(setImmediate);
+  vm.runInContext(`${storageFixture} persistAnalysisResults()`, first.context);
+  assert.equal(storage.size, 1);
+  const second = screen(storage);
+  await new Promise(setImmediate);
+  second.context.fetch = () => { throw new Error('복원 중 API 호출 금지'); };
+  vm.runInContext(`${storageFixture} analysisResults.clear(); restoreAnalysisResults()`, second.context);
+  assert.equal(vm.runInContext('analysisResults.size', second.context), 2);
+  assert.equal(vm.runInContext("analysisResults.get('live:female').recommendation.resources.length", second.context), 0);
+  assert.equal(vm.runInContext("analysisResults.get('offline:female').errorMessage", second.context), '테스트 실패');
+  assert.ok(second.element('#analysis-storage-status').textContent.includes('2건'));
+  second.element('#clear-analysis-storage').handlers.click();
+  assert.equal(storage.size, 0);
+  assert.equal(vm.runInContext('analysisResults.size', second.context), 0);
+});
+
+test('배치·요청 조건·응답 방식이 다른 저장 자료를 복원하지 않으며 저장 오류로 결과를 잃지 않는다', async () => {
+  const storage = new Map();
+  const {context, element} = screen(storage);
+  await new Promise(setImmediate);
+  vm.runInContext(`${storageFixture} persistAnalysisResults(); analysisResults.clear(); analysisInputs.batch_id='other'; restoreAnalysisResults()`, context);
+  assert.equal(vm.runInContext('analysisResults.size', context), 0);
+  vm.runInContext("analysisInputs.batch_id='persist-batch'; analysisInputs.entries[0].request.target.age_group=40; restoreAnalysisResults()", context);
+  assert.equal(vm.runInContext('analysisResults.size', context), 0);
+  const original = JSON.parse(storage.get('ieum-welfare-results-v1'));
+  original.entries[0].record.recommendation.mode = 'offline';
+  original.entries = original.entries.slice(0, 1);
+  storage.set('ieum-welfare-results-v1', JSON.stringify(original));
+  vm.runInContext('analysisInputs.entries[0].request.target.age_group=30; restoreAnalysisResults()', context);
+  assert.equal(vm.runInContext('analysisResults.size', context), 0);
+  storage.set('ieum-welfare-results-v1', '{broken');
+  vm.runInContext('restoreAnalysisResults()', context);
+  assert.ok(element('#analysis-storage-status').textContent.includes('읽지 못했습니다'));
+  context.localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
+  vm.runInContext(`${storageFixture} persistAnalysisResults()`, context);
+  assert.equal(vm.runInContext('analysisResults.size', context), 2);
+  assert.ok(element('#analysis-storage-status').textContent.includes('저장하지 못했습니다'));
 });
