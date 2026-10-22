@@ -172,4 +172,4 @@ AI를 활용해 신규 프로그램 또는 개선안을 제안한다.
 
 원본→정제→성별 분석→단계→순위→다음 Agent 입력의 파일별 설명은 [전체 분석 처리 과정](docs/hansu_analysis_pipeline.md), 환경은 [실행 환경](docs/agent_environment.md), 정리 내용은 [파일 정리 기록](docs/branch_cleanup_20261020.md)을 참고한다.
 
-성별을 보존한 risk-input-0.2를 한수의 기준 출력으로 확정했고, 현지가 수신부를 이에 맞춘다. 코드 병합과 전체 서비스 연결 완료는 구분한다. 과거 독립 수정 에이전트 실험은 현재 분석 경로에서 제외했다.
+성별을 보존한 risk-input-0.2를 한수의 기준 출력으로 확정했다. 수신부와 공통 변환기가 0.2를 지원하며 `recommend_from_analysis(bundle, analysis_id)`로 ZIP 없이 복지추천에 직접 연결한다. [연결·실행 방법](docs/analysis_welfare_connection.md). 전체 기획·평가까지의 연결 완료와는 구분한다. 과거 독립 수정 에이전트 실험은 현재 분석 경로에서 제외했다.

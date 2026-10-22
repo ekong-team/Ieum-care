@@ -1,6 +1,7 @@
 """공식 안내에 근거한 복지자원 후보 조회. 개인 자격·효과·위험도는 판단하지 않는다."""
 
 import json
+from copy import deepcopy
 import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -26,8 +27,10 @@ def validate_request(payload):
     if set(payload) - {"target", "risk_assessment", "confirmed_support_needs", "analysis_context"}:
         raise ValueError("지원하지 않는 요청 항목이 있습니다.")
     target = payload.get("target")
-    if not isinstance(target, dict) or set(target) != {"region", "age_group", "purpose"}:
+    if not isinstance(target, dict) or set(target) not in ({"region", "age_group", "purpose"}, {"region", "age_group", "purpose", "sex"}):
         raise ValueError("target에는 region, age_group, purpose가 필요합니다.")
+    if "sex" in target and target["sex"] not in ("all", "male", "female"):
+        raise ValueError("sex는 all, male, female 중 하나여야 합니다.")
     if target["region"] not in ("춘천시", "강남구"):
         raise ValueError("현재 지원 지역은 춘천시·강남구입니다.")
     if type(target["age_group"]) is not int or target["age_group"] not in (10, 20, 30, 40, 50, 60):
@@ -55,6 +58,8 @@ def validate_analysis_context(payload, target):
     profile, risk = context.profile, payload.get("risk_assessment")
     if profile.target.region != target["region"] or profile.target.age_group != target["age_group"]:
         raise ValueError("분석 맥락과 추천 대상의 지역·연령대가 다릅니다.")
+    if "sex" in target and profile.target.sex != target["sex"]:
+        raise ValueError("분석 맥락과 추천 대상의 성별이 다릅니다.")
     if (profile.risk is None) != (risk is None):
         raise ValueError("분석 맥락과 위험도 입력의 유무가 다릅니다.")
     if risk is not None and (profile.risk.status != risk["status"] or profile.risk.level != risk["level"]
@@ -69,6 +74,12 @@ def validate_risk(risk, target):
     """팀원과 합의할 초안 계약. 단계 계산 없이 전달값의 형식·집단 일치만 검증한다."""
     if risk is None:
         return
+    if isinstance(risk, dict) and risk.get("schema_version") == "risk-input-0.2":
+        from ai.analysis_agent.welfare_handoff import WelfareRequest02
+        WelfareRequest02.model_validate({"target": target, "risk_assessment": risk})
+        return
+    if "sex" in target:
+        raise ValueError("성별 포함 위험도는 risk-input-0.2로 전달해야 합니다.")
     keys = {"schema_version", "assessment_id", "region", "age_group", "period", "status", "level", "signals", "limitations", "model_version", "is_example"}
     if not isinstance(risk, dict) or set(risk) != keys:
         raise ValueError("위험도 입력 필드가 초안 계약과 일치하지 않습니다.")
@@ -175,7 +186,7 @@ def load_catalog():
 
 def age_overlap(age_group, ranges):
     """집단 구간과 서비스 연령의 교집합. 미명시 조건은 전체 연령으로 확정하지 않는다."""
-    low, high = (0, 19) if age_group == 10 else (age_group, None if age_group == 60 else age_group + 9)
+    low, high = (10, 19) if age_group == 10 else (age_group, None if age_group == 60 else age_group + 9)
     unknown = False
     overlaps = []
     for span in ranges:
@@ -230,6 +241,7 @@ def recommend(payload):
         "recommendation_method": "official_candidate_review_v1",
         "catalog_version": "official-seed-2026-10-16",
         "target": target,
+        **({"analysis_context": deepcopy(payload["analysis_context"])} if "analysis_context" in payload else {}),
         "risk_assessment": payload.get("risk_assessment"),
         "has_example_context": bool(payload.get("risk_assessment") and payload["risk_assessment"]["is_example"]),
         "review": review,

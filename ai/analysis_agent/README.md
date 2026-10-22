@@ -1,5 +1,7 @@
 # 분석 에이전트
 
+2026-10-22: ZIP 없이 복지추천까지 연결하려면 `recommendation.recommend_from_analysis(bundle, analysis_id)`를 사용한다. 저장 결과 실행은 `scripts/integration/run_analysis_welfare.py --analysis-id ...`이며 기본 offline이다. 최신 연결 안내: `docs/analysis_welfare_connection.md`. 현지 수신부·공통 변환기는 성별 포함0.2를 지원한다. 아래 과거 전달 설명보다 이 안내를 우선한다.
+
 2026-10-20: Gemini·Tavily 선택적 연결은 `docs/analysis_gemini_tavily_20261020.md` 참조.
 `--mode gemini --web-search --analysis-id ... --allow-external`로 단일 집단을 검토한다.
 키는 `.env`에서 읽고 `--check-config`는 값 없이 설정 여부만 출력한다.

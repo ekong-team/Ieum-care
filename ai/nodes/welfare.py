@@ -21,8 +21,8 @@ def to_welfare_payload(profile: TargetProfile, run_id: str, *, causes: list[Caus
     warnings = []
     target = profile.target
     if target.sex != "all":
-        warnings.append("외부 검색은 성별 구분 없이 조회합니다. 성별은 분석 맥락으로만 전달하며 실제 자격 조건은 담당자가 확인하세요.")
-    payload = {"target": {"region": target.region, "age_group": target.age_group, "purpose": "all"},
+        warnings.append("성별을 추천 요청과 분석 맥락에 보존합니다. 실제 자원 자격 조건은 담당자가 확인하세요.")
+    payload = {"target": {"region": target.region, "age_group": target.age_group, "sex": target.sex, "purpose": "all"},
                "confirmed_support_needs": []}
     try:
         context = WelfareAnalysisContext(profile=profile, causes=causes or [])
@@ -39,10 +39,11 @@ def to_welfare_payload(profile: TargetProfile, run_id: str, *, causes: list[Caus
         description = " / ".join(related) if related else f"{SIGNAL_LABELS[code]} 신호"
         signals.append({"type": code, "description": description[:1000]})
     payload["risk_assessment"] = {
-        "schema_version": "risk-input-0.1",
+        "schema_version": "risk-input-0.2",
         "assessment_id": f"{run_id}-{digest}"[:200],
         "region": target.region,
         "age_group": target.age_group,
+        "sex": target.sex,
         "period": profile.period,
         "status": profile.risk.status,
         "level": profile.risk.level,

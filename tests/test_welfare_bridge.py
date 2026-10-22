@@ -34,7 +34,7 @@ class WelfareBridgeTests(unittest.TestCase):
     def test_with_complete_risk(self):
         payload, warnings = self.convert(profile_data())
         risk = payload["risk_assessment"]
-        self.assertEqual(payload["target"], {"region": "춘천시", "age_group": 20, "purpose": "all"})
+        self.assertEqual(payload["target"], {"region": "춘천시", "age_group": 20, "sex": "all", "purpose": "all"})
         self.assertEqual(risk["level"], 3)
         self.assertEqual([item["type"] for item in risk["signals"]], ["consumption_decline", "movement_decline"])
         self.assertIn("외식·카페", risk["signals"][0]["description"])
@@ -54,11 +54,13 @@ class WelfareBridgeTests(unittest.TestCase):
         self.assertIsNone(payload["risk_assessment"]["level"])
         self.assertEqual(payload["risk_assessment"]["model_version"], "manual-input")
 
-    def test_sex_is_dropped_with_warning(self):
+    def test_sex_is_preserved_in_request_and_context(self):
         data = profile_data()
         data["target"]["sex"] = "female"
         payload, warnings = self.convert(data)
-        self.assertNotIn("sex", payload["target"])
+        self.assertEqual(payload["target"]["sex"], "female")
+        self.assertEqual(payload["risk_assessment"]["sex"], "female")
+        self.assertEqual(payload["risk_assessment"]["schema_version"], "risk-input-0.2")
         self.assertTrue(any("성별" in text for text in warnings))
 
     def test_structured_evidence_and_causes_are_preserved_without_conversion(self):

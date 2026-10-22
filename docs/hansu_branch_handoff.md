@@ -1,5 +1,7 @@
 # 한수 브랜치 안내
 
+2026-10-22: 분석 → 복지추천 직접 연결 구현. ZIP 대신 `recommend_from_analysis(bundle, analysis_id)`를 사용한다. [최신 연결 방법](analysis_welfare_connection.md)을 우선한다. 아래의 수신부 변경 예정 설명은 이전 기록이다.
+
 현재 범위는 제공 데이터 분석·성별 활동 위축 단계·원인 가설·위험도 기준1차 우선 대상까지다.
 
 먼저 [전체 처리 과정](hansu_analysis_pipeline.md)을 읽는다. 원본 파일, 정제 기준, 모듈별 역할, 계산식, 순위, 실제 실행, 다음 Agent의 입력 계약과 한계를 한 문서에 정리했다.

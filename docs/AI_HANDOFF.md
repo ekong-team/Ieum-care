@@ -1,3 +1,5 @@
+2026-10-22 최신 연결: ZIP 대신 ai/analysis_agent/recommendation.py의 recommend_from_analysis(bundle, analysis_id)를 사용한다. CLI는 scripts/integration/run_analysis_welfare.py. 현지 수신부와 공통 변환기는 성별 포함0.2를 지원하고 기존0.1도 받는다. 전체247개 테스트 통과·저장216건 연결 확인·실제외부호출0. docs/analysis_welfare_connection.md 우선. 아래 수신부 미적용 설명은 이전 기록이다. 이번 변경의 Git 반영 여부는 실제 상태를 확인한다.
+
 2026-10-20 메인 병합 전 최종 검증: 사용하지 않는 기온·물가 탐색 스크립트2개를 추가 제외해 로컬 보관58개. 공간 패키지를 설치해 이전 생략3개까지 실행했으며 전체241개 통과·실패0·오류0·생략0. 외부API호출0, 기존분석216개·순위24개 재계산도 통과.
 
 # 현재 분석 작업 인수인계 — 2026-10-20
