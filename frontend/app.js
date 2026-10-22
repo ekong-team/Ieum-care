@@ -5,6 +5,7 @@ let responseRouting = null;
 // 폼을 바꿔도 마지막 조회에 사용한 대상·분석 맥락으로 기획 요청을 만든다.
 let planningContext = null;
 let preparedPlanningRequest = null;
+let planningSendRunning = false;
 let analysisInputs = null;
 let connectedAnalysisEntry = null;
 let analysisBatchRunning = false;
@@ -114,7 +115,9 @@ function navigate() {
     return;
   }
   $('#recommendation-page').hidden = page !== 'recommendations';
-  $('#empty-page').hidden = page === 'recommendations';
+  $('#planning-page').hidden = page !== 'planning';
+  $('#empty-page').hidden = ['recommendations', 'planning'].includes(page);
+  if (page === 'planning') loadPlanningInbox();
   $('#empty-title').textContent = pages[page];
   document.title = `이음케어 · ${pages[page]}`;
   document.querySelectorAll('.navigation a').forEach((link) => {
@@ -198,6 +201,7 @@ function clearPlanningPreview() {
   $('#planning-json').textContent = '';
   $('#planning-summary').textContent = '';
   $('#download-planning').disabled = true;
+  $('#send-planning').disabled = true;
 }
 
 function updatePlanningControls() {
@@ -249,8 +253,52 @@ function preparePlanningRequest(planningType) {
     $('#planning-json').textContent = JSON.stringify(preparedPlanningRequest, null, 2);
     $('#planning-preview').hidden = false;
     $('#download-planning').disabled = false;
-    $('#planning-status').textContent = '기획 요청을 준비했습니다. 내용을 확인하고 JSON 파일을 내려받아 팀원에게 전달하세요.';
+    $('#send-planning').disabled = planningSendRunning;
+    $('#planning-send-status').textContent = '미리보기 내용을 확인한 뒤 기획 전달함에 저장하세요. 기획서 생성은 실행하지 않습니다.';
+    $('#planning-status').textContent = '기획 요청을 준비했습니다. 내용을 확인하고 전달함에 저장하거나 JSON 파일을 내려받으세요.';
   } catch (error) { $('#planning-status').textContent = error.message; }
+}
+
+async function sendPlanningRequest() {
+  if (!preparedPlanningRequest || planningSendRunning || loading) return;
+  const request = preparedPlanningRequest; // 저장 도중 새 미리보기가 생겨도 이전 요청과 섞지 않는다.
+  planningSendRunning = true;
+  $('#send-planning').disabled = true;
+  $('#planning-send-status').textContent = '기획 요청을 검증하고 로컬 전달함에 저장하고 있습니다.';
+  try {
+    const response = await fetch('/api/planning/requests', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(request), signal:AbortSignal.timeout(15000)});
+    if (!response.headers?.get('content-type')?.includes('application/json')) throw new Error('최신 코드로 추천 서버를 다시 실행해주세요.');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '기획 요청 저장에 실패했습니다.');
+    if (result.schema_version !== 'planning-inbox-0.1' || result.request?.request_id !== request.request_id
+        || result.status !== 'awaiting_planning_agent' || result.agent_connected !== false) throw new Error('기획 전달함 응답을 확인해주세요.');
+    $('#planning-send-status').textContent = '기획 전달함에 저장했습니다. 프로그램 기획 탭에서 확인하세요. 실제 기획 Agent는 연결 대기 중입니다.';
+  } catch (error) {
+    $('#planning-send-status').textContent = `${error.name === 'TimeoutError' ? '저장 응답 시간이 초과되었습니다. 같은 요청으로 다시 시도할 수 있습니다.' : error.message} 자동 재시도하지 않았습니다.`;
+  } finally {
+    planningSendRunning = false;
+    $('#send-planning').disabled = !preparedPlanningRequest;
+  }
+}
+
+async function loadPlanningInbox() {
+  $('#load-planning-inbox').disabled = true;
+  $('#planning-inbox-status').textContent = '전달함을 불러오고 있습니다.';
+  $('#planning-inbox-list').replaceChildren();
+  try {
+    const response = await fetch('/api/planning/requests', {signal:AbortSignal.timeout(15000)});
+    if (!response.headers?.get('content-type')?.includes('application/json')) throw new Error('최신 코드로 추천 서버를 다시 실행해주세요.');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '전달함을 불러오지 못했습니다.');
+    if (result.schema_version !== 'planning-inbox-0.1' || !Array.isArray(result.requests)) throw new Error('전달함 응답 형식을 확인해주세요.');
+    $('#planning-inbox-status').textContent = `${result.requests.length}건 저장됨 · 실제 기획 Agent 연결 대기 · 기획서 생성·검색·LLM 실행 없음`;
+    $('#planning-inbox-list').innerHTML = result.requests.length ? result.requests.map((item) => {
+      const request = item.request;
+      return `<article class="resource-card"><h2>${escape(request.target.region)} · ${escape(ageLabel(request.target.age_group))} · ${escape(sexLabel(request.target.sex))}</h2><p>${request.planning_type === 'existing_resource_based' ? '기존 자원 활용' : '예방·신규 기획'} · 선택 자원 ${request.selected_resources.length}개 · ${request.welfare_lookup.mode === 'live' ? '실시간 추천' : '저장 자료 테스트'}</p><p class="muted">접수: ${escape(item.received_at)} · 기획 Agent 연결 대기${request.has_example_context ? ' · 예시 분석 포함' : ''}</p><p>${escape(request.officer_prompt || '담당자 추가 요청 없음')}</p><details><summary>팀원에게 전달할 요청 원문</summary><pre>${escape(JSON.stringify(request, null, 2))}</pre></details></article>`;
+    }).join('') : '<p>아직 저장한 요청이 없습니다. 복지 추천 화면에서 기획 요청을 준비하고 전달함에 저장하세요.</p>';
+  } catch (error) { $('#planning-inbox-status').textContent = error.message; }
+  finally { $('#load-planning-inbox').disabled = false; }
 }
 
 async function queryResources() {
@@ -557,6 +605,8 @@ for (const selector of ['#region', '#age', '#sex']) {
 }
 
 $('#prepare-existing').addEventListener('click', () => preparePlanningRequest('existing_resource_based'));
+$('#send-planning').addEventListener('click', sendPlanningRequest);
+$('#load-planning-inbox').addEventListener('click', loadPlanningInbox);
 $('#prepare-preventive').addEventListener('click', () => preparePlanningRequest('preventive_new'));
 $('#planning-prompt').addEventListener('input', updatePlanningControls);
 $('#download-planning').addEventListener('click', () => {

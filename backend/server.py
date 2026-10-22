@@ -17,6 +17,7 @@ from ai.welfare_agent.live_agent import recommend_live, config_status, AgentErro
 from ai.contracts import ExistingResources  # noqa: E402
 from ai.nodes.welfare import attach_response_routes, to_existing_resources  # noqa: E402
 from ai.welfare_agent.analysis_input import prepare_analysis_inputs, latest_analysis_inputs  # noqa: E402
+from ai.welfare_agent.planning_handoff import PlanningInbox  # noqa: E402
 
 LIVE_SLOT = BoundedSemaphore(1)
 
@@ -28,6 +29,13 @@ def unavailable_routing():
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/api/planning/requests':
+            try:
+                self.send_json(HTTPStatus.OK, {'schema_version': 'planning-inbox-0.1', 'agent_connected': False,
+                                              'requests': self.server.planning_inbox.list_requests()})
+            except OSError:
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': '기획 전달함을 읽지 못했습니다.'})
+            return
         if self.path == "/api/welfare/analysis-inputs":
             try:
                 result = self.server.analysis_inputs or latest_analysis_inputs(ROOT / 'data/processed/analysis_current')
@@ -55,6 +63,24 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == '/api/planning/requests':
+            if self.headers.get_content_type() != 'application/json':
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 2 * 1024 * 1024:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {'error': '기획 요청 크기를 확인해주세요.'})
+                    return
+                envelope = self.server.planning_inbox.save(json.loads(self.rfile.read(length)))
+            except (ValueError, TypeError, KeyError, AttributeError, UnicodeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': '기획 요청의 대상·근거·선택 자원·조회 상태가 일치하지 않습니다.'})
+                return
+            except OSError:
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': '기획 요청을 저장하지 못했습니다. 다시 시도해주세요.'})
+                return
+            self.send_json(HTTPStatus.OK, envelope)
+            return
         if self.path == '/api/welfare/analysis-inputs':
             # 분석 프로세스가 run_analysis() 반환값을 직접 전달하는 수신점.
             if self.headers.get_content_type() != 'application/json':
@@ -121,10 +147,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, result)
 
 
-def create_server(port=5175):
+def create_server(port=5175, *, planning_root=None):
     # 프로젝트 루트·원본 데이터가 아니라 frontend 폴더만 정적 제공한다.
     server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend")))
     server.analysis_inputs = None
+    server.planning_inbox = PlanningInbox(planning_root or ROOT / 'data/processed/planning_requests')
     return server
 
 

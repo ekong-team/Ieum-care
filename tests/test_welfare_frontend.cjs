@@ -314,3 +314,47 @@ test('배치·요청 조건·응답 방식이 다른 저장 자료를 복원하�
   assert.equal(vm.runInContext('analysisResults.size', context), 2);
   assert.ok(element('#analysis-storage-status').textContent.includes('저장하지 못했습니다'));
 });
+
+test('준비한 기획 요청만 서버에 저장하며 같은 ID로 수동 재시도한다', async () => {
+  const {context, element} = withPlanningData();
+  await new Promise(setImmediate);
+  element('#prepare-preventive').handlers.click();
+  let calls = 0;
+  const received = [];
+  context.fetch = async (url, options) => {
+    assert.equal(url, '/api/planning/requests');
+    received.push(JSON.parse(options.body));
+    calls++;
+    return {ok:calls > 1, headers:{get:()=> 'application/json'}, json:async()=> calls === 1
+      ? {error:'저장 실패'} : {schema_version:'planning-inbox-0.1',status:'awaiting_planning_agent',agent_connected:false,request:received.at(-1)}};
+  };
+  await vm.runInContext('sendPlanningRequest()', context);
+  assert.equal(calls, 1);
+  assert.ok(element('#planning-send-status').textContent.includes('저장 실패'));
+  assert.equal(element('#send-planning').disabled, false);
+  await vm.runInContext('sendPlanningRequest()', context);
+  assert.equal(received[0].request_id, received[1].request_id);
+  assert.ok(element('#planning-send-status').textContent.includes('연결 대기'));
+  element('#planning-prompt').handlers.input();
+  assert.equal(element('#send-planning').disabled, true);
+  await vm.runInContext('sendPlanningRequest()', context);
+  assert.equal(calls, 2);
+});
+
+test('기획 전달함은 생성 결과와 구분하고 담당자 입력을 HTML로 실행하지 않는다', async () => {
+  const {context, element} = withPlanningData();
+  await new Promise(setImmediate);
+  element('#planning-prompt').value = '<script>bad()</script>';
+  element('#prepare-preventive').handlers.click();
+  const request = JSON.parse(element('#planning-json').textContent);
+  context.fetch = async () => ({ok:true,headers:{get:()=> 'application/json'},json:async()=> ({
+    schema_version:'planning-inbox-0.1',agent_connected:false,requests:[{received_at:'2026-10-22',request}]})});
+  await vm.runInContext('loadPlanningInbox()', context);
+  assert.ok(element('#planning-inbox-status').textContent.includes('1건 저장됨'));
+  assert.ok(element('#planning-inbox-list').innerHTML.includes('&lt;script&gt;'));
+  assert.ok(!element('#planning-inbox-list').innerHTML.includes('<script>'));
+  context.fetch = async () => ({ok:false,headers:{get:()=> 'application/json'},json:async()=>({error:'서버 확인 필요'})});
+  await vm.runInContext('loadPlanningInbox()', context);
+  assert.equal(element('#planning-inbox-list').innerHTML, '');
+  assert.equal(element('#planning-inbox-status').textContent, '서버 확인 필요');
+});

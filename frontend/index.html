@@ -31,6 +31,10 @@
       <div class="page-heading"><div><p class="eyebrow">IEUM CARE</p><h1 id="empty-title">대시보드</h1></div></div>
       <div class="empty-canvas" aria-label="아직 콘텐츠가 없는 화면"></div>
     </section>
+    <section id="planning-page" hidden aria-labelledby="planning-page-title">
+      <div class="page-heading"><div><p class="eyebrow">PROGRAM PLANNING</p><h1 id="planning-page-title">프로그램 기획 · 요청 전달함</h1><p class="subtitle">복지 추천에서 준비한 요청을 확인하세요. 실제 기획 Agent는 아직 연결되지 않았습니다.</p></div></div>
+      <div class="panel analysis-input-panel"><button id="load-planning-inbox" class="secondary" type="button">전달함 새로고침</button><p id="planning-inbox-status" class="muted" role="status"></p><div id="planning-inbox-list"></div></div>
+    </section>
     <section id="recommendation-page" hidden aria-labelledby="recommendation-title">
       <div class="page-heading">
         <div><p class="eyebrow">WELFARE CONNECTION</p><h1 id="recommendation-title">필요한 지원을, 알맞은 곳으로</h1><p class="subtitle">지역과 연령, 지원 목적에 맞는 복지자원을 살펴보고 연결하세요.</p></div>
@@ -97,7 +101,9 @@
             <div class="planning-actions"><button id="prepare-existing" class="secondary" type="button" disabled>선택 자원 활용 기획 요청 만들기</button><button id="prepare-preventive" class="primary" type="button" disabled>예방·신규 기획 요청 만들기</button></div>
             <p id="planning-status" class="muted" role="status">조회 후 요청을 준비할 수 있습니다.</p>
             <div id="planning-preview" hidden><p id="planning-summary"></p><details><summary>전달 데이터 보기</summary><pre id="planning-json"></pre></details></div>
-            <div class="handoff-bottom"><small>기획 Agent 연결 전 · JSON 파일을 팀원에게 전달하세요. 기획서 생성·자동 전송은 아직 지원하지 않습니다.</small><button id="download-planning" class="secondary" type="button" disabled>기획 요청 JSON 내려받기 <span aria-hidden="true">↓</span></button></div>
+            <div class="planning-actions"><button id="send-planning" class="primary" type="button" disabled>검토한 요청을 기획 전달함에 저장</button><a href="#planning" class="text-button">기획 전달함 보기 →</a></div>
+            <p id="planning-send-status" class="muted" role="status">전달함에 저장하면 담당자 요청과 분석·추천 자료가 로컬 서버에 보관됩니다.</p>
+            <div class="handoff-bottom"><small>실제 기획 Agent 연결 전 · 전달함 저장은 기획서 생성을 실행하지 않습니다.</small><button id="download-planning" class="secondary" type="button" disabled>기획 요청 JSON 내려받기 <span aria-hidden="true">↓</span></button></div>
           </section>
         </div>
       </div>
