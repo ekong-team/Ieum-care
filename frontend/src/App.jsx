@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, pages, targetLabel } from "./domain.js";
 import useWelfare from "./useWelfare.js";
+import Dashboard from "./components/Dashboard.jsx";
 import {
   AnalysisPanels,
   Filters,
@@ -143,7 +144,17 @@ export default function App() {
         <div className="header-inner">
           <a className="brand" href="#dashboard" aria-label="이음케어 대시보드">
             <span className="brand-mark" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" focusable="false">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                focusable="false"
+              >
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
               </svg>
@@ -172,7 +183,7 @@ export default function App() {
       </header>
       <main id="main" tabIndex={-1}>
         <section
-          hidden={["recommendations", "planning"].includes(page)}
+          hidden={["recommendations", "planning", "dashboard"].includes(page)}
           aria-label={pages[page]}
         >
           <div className="page-heading">
@@ -183,6 +194,15 @@ export default function App() {
           </div>
           <div className="empty-canvas" aria-label="아직 콘텐츠가 없는 화면" />
         </section>
+        <div hidden={page !== "dashboard"}>
+          <Dashboard
+            model={model}
+            openRecommendations={(entry) => {
+              model.selectEntry(entry);
+              location.hash = "#recommendations";
+            }}
+          />
+        </div>
         <PlanningInbox active={page === "planning"} />
         <section
           hidden={page !== "recommendations"}

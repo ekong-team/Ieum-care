@@ -234,19 +234,43 @@ test("팀원 입력의 지원 필요는 보존하되 다른 집단으로 바꾸�
   const originalFetch = globalThis.fetch;
   const connectedBatch = structuredClone(batch);
   connectedBatch.entries[0].request.confirmed_support_needs = ["connection"];
-  vi.stubGlobal("fetch", (path, options) => path === "/api/welfare/analysis-inputs"
-    ? Promise.resolve(response(connectedBatch)) : originalFetch(path, options));
+  vi.stubGlobal("fetch", (path, options) =>
+    path === "/api/welfare/analysis-inputs"
+      ? Promise.resolve(response(connectedBatch))
+      : originalFetch(path, options),
+  );
   const user = userEvent.setup();
   await load();
   await selectFirst(user);
-  await user.click(screen.getByRole("button", {name:"복지자원 추천받기 →"}));
+  await user.click(screen.getByRole("button", { name: "복지자원 추천받기 →" }));
   await screen.findByText("근거를 갖춘 후보를 제시하지 못했습니다.");
   expect(posts[0].confirmed_support_needs).toEqual(["connection"]);
   await user.selectOptions(screen.getByLabelText("대상 지역"), "강남구");
-  await user.click(screen.getByRole("button", {name:"복지자원 추천받기 →"}));
+  await user.click(screen.getByRole("button", { name: "복지자원 추천받기 →" }));
   await waitFor(() => expect(posts).toHaveLength(2));
   expect(posts[1].confirmed_support_needs).toEqual([]);
   expect(posts[1].risk_assessment).toBeNull();
+});
+
+test("대시보드의 집단 선택에서 복지 추천으로 이동해도 검색은 직접 실행할 때만 한다", async () => {
+  const user = userEvent.setup();
+  await load();
+  await user.click(screen.getByRole("link", { name: "대시보드" }));
+  await screen.findByRole("heading", { name: "지역 × 연령 위험 현황" });
+  await user.click(
+    screen.getByRole("button", { name: "춘천시 · 30대 · 남성 · 4단계" }),
+  );
+  await user.click(
+    screen.getByRole("button", { name: "이 집단 복지 추천으로 이동 →" }),
+  );
+  await screen.findByRole("heading", { name: "필요한 지원을, 알맞은 곳으로" });
+  expect(screen.getByRole("combobox", { name: "분석 대상 성별" }).value).toBe(
+    "male",
+  );
+  expect(posts).toHaveLength(0);
+  await user.click(screen.getByRole("button", { name: "복지자원 추천받기 →" }));
+  await waitFor(() => expect(posts).toHaveLength(1));
+  expect(posts[0]).toEqual({ mode: "live", ...entries[1].request });
 });
 
 test("잘못된 요청 실패에는 기획을 허용하지 않고 UI에서 입력 문자열을 실행하지 않는다", async () => {
