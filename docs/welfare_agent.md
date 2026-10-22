@@ -1,7 +1,7 @@
 # 복지자원 추천 Agent
 
 기본 경로는 **지역·연령·목적 → Tavily 공식 자료 검색 → 분석 결과와 Gemini 추천 판단 → 출처·조건 대조 → 화면과 기획 전달 데이터**다.
-고정 목록 조회는 offline 테스트 모드로 분리했다. 실제 위험도 자동 수신과 프로그램 기획 Agent는 연결 전이다.
+React 화면은 실시간 추천만 제공한다. 고정 목록 조회는 팀원 그래프·자동 검증용 Python 경로로만 유지한다. 실제 분석 결과 직접 수신과 기획 요청 전달함을 연결했으며, 실제 프로그램 기획 Agent는 연결 전이다.
 정제·위험도 계산과 프로그램 기획 로직은 변경하지 않는다.
 
 
@@ -67,9 +67,9 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 
 ## 실행과 파일
 
-프로젝트 최상위에서 `python backend/server.py` 실행 후 <http://127.0.0.1:5175/#recommendations> 접속.
-추가 패키지 설치는 필요 없다. 실시간 모드는 두 API 키가 필요하고 offline 테스트는 키 없이 실행된다. `--port 5176`처럼 다른 포트를 지정할 수 있다.
-서버는 로컬 개발용이며 127.0.0.1에서 frontend 폴더만 제공한다. 외부 배포용 서버가 아니다.
+React 전환 후에는 `frontend`에서 `npm ci`, `npm run build`를 먼저 실행한다. 프로젝트 최상위에서 `python backend/server.py` 실행 후 <http://127.0.0.1:5175/#recommendations> 접속한다. Node.js 22.12 이상을 사용한다. 개발용 Vite 실행·파일 구성은 [프론트엔드 안내](../frontend/README.md)에 정리했다.
+실시간 모드는 두 API 키가 필요하다. Python의 offline 검증 경로는 키 없이 실행되지만 화면에는 제공하지 않는다. `--port 5176`처럼 다른 포트를 지정할 수 있다.
+서버는 로컬 개발용이며 127.0.0.1에서 frontend/dist 빌드 결과만 제공한다. 소스·설정·원본 데이터는 정적으로 제공하지 않는다. 외부 배포용 서버가 아니다.
 
 | 파일 | 역할 |
 | --- | --- |
@@ -77,10 +77,14 @@ Gemini 실패 뒤에도 이 검색 결과는 남아 있어 같은 조건으로 �
 | `ai/welfare_agent/recommender.py` | 요청 검증·지역/연령대/목적 필터·일치 근거 |
 | `ai/welfare_agent/welfare_resources.json` | 공식 안내에 근거한 자원 6개와 출처·확인 상태 |
 | `backend/server.py` | 화면 및 JSON API 제공 |
-| `frontend/app.js` | API 호출·로딩·오류/재시도·선택/내려받기 |
+| `frontend/src/App.jsx` | 공통 메뉴·React 페이지·기획 전달함 |
+| `frontend/src/useWelfare.js` | 분석 수신·순차 추천·중지·오류·브라우저 결과 저장 |
+| `frontend/src/domain.js` | API·입력 계약·검토표·기획 요청·저장 변환 |
 | `tests/test_welfare_agent.py` | 필터·계약·출처와 HTTP 연결 검증 |
 
 ## 요청 및 실행 모드
+
+아래 offline·수동 JSON 관련 설명은 Python API 계약과 검증 방법이다. 현재 React 화면의 테스트 모드·수동 JSON·예시 채우기 조작은 제거했다. 분석 집단 선택으로 근거를 연결하며 직접 지역·연령·성별 변경 시 일반 탐색으로 전환한다. 이전 live 저장 결과는 동일 계약으로 복원하고 offline 저장 결과는 복원하지 않는다. 자동 테스트는 유지하되 구형 DOM 모의 검사는 React 렌더링 검사로 교체했다.
 
 `POST /api/welfare/recommendations`, `Content-Type: application/json`
 

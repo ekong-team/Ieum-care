@@ -48,6 +48,9 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/api/welfare/status":
             self.send_json(HTTPStatus.OK, config_status())
             return
+        if not (ROOT / 'frontend/dist/index.html').exists():
+            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, 'Build the React frontend first: cd frontend && npm ci && npm run build')
+            return
         super().do_GET()
 
     def end_headers(self):
@@ -148,8 +151,8 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def create_server(port=5175, *, planning_root=None):
-    # 프로젝트 루트·원본 데이터가 아니라 frontend 폴더만 정적 제공한다.
-    server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend")))
+    # React 빌드 결과만 제공한다. 소스·설정·원본 데이터는 정적 경로에 포함하지 않는다.
+    server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend/dist")))
     server.analysis_inputs = None
     server.planning_inbox = PlanningInbox(planning_root or ROOT / 'data/processed/planning_requests')
     return server
