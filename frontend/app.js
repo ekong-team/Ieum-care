@@ -5,6 +5,11 @@ let responseRouting = null;
 // 폼을 바꿔도 마지막 조회에 사용한 대상·분석 맥락으로 기획 요청을 만든다.
 let planningContext = null;
 let preparedPlanningRequest = null;
+let analysisInputs = null;
+let connectedAnalysisEntry = null;
+let analysisBatchRunning = false;
+let analysisStopRequested = false;
+const analysisResults = new Map(); // 이번 화면 세션의 완료 결과를 재사용한다.
 let loading = false;
 let errorMessage = '';
 let requestedMode = 'live';
@@ -45,6 +50,7 @@ function updateRetryControls() {
     retry.textContent = remaining ? `${remaining}초 후 다시 시도` : '다시 시도';
   }
   $('#filter-form button[type="submit"]').disabled = loading || remaining > 0;
+  $('#run-analysis-recommendations').disabled = loading || analysisBatchRunning || remaining > 0 || !analysisInputs?.entries.length;
   if (!remaining && retryTimer !== null) {
     clearInterval(retryTimer);
     retryTimer = null;
@@ -222,6 +228,10 @@ async function queryResources() {
     catch { throw new Error('위험도 JSON 형식이 올바르지 않습니다. 예시 입력과 비교해주세요.'); }
     const input = { target: { region: filters.region, age_group: filters.age, sex: filters.sex, purpose: filters.purpose }, risk_assessment: risk,
       confirmed_support_needs: [...document.querySelectorAll('[name="support-need"]:checked')].map((input) => input.value) };
+    if (connectedAnalysisEntry && JSON.stringify(risk) === JSON.stringify(connectedAnalysisEntry.request.risk_assessment)
+        && ['region', 'age_group', 'sex'].every((key) => input.target[key] === connectedAnalysisEntry.request.target[key])) {
+      input.analysis_context = connectedAnalysisEntry.request.analysis_context;
+    }
     const response = await fetch('/api/welfare/recommendations', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: requestedMode, ...input }),
@@ -257,9 +267,106 @@ async function queryResources() {
     $('#clear-risk-input').disabled = false;
     renderResults();
   }
+  return Boolean(recommendation);
 }
 
-$('#filter-form').addEventListener('submit', (event) => { event.preventDefault(); queryResources(); });
+function renderAnalysisInputs() {
+  const panel = $('#analysis-targets');
+  panel.replaceChildren();
+  if (!analysisInputs) return;
+  const mode = $('#search-mode').value;
+  panel.innerHTML = analysisInputs.entries.map((entry, index) => {
+    const target = entry.request.target;
+    const saved = analysisResults.get(`${mode}:${entry.analysis_id}`);
+    return `<div class="analysis-target"><span><strong>${escape(entry.rank)}순위</strong> · ${escape(target.region)} · ${escape(ageLabel(target.age_group))} · ${escape(sexLabel(target.sex))} · ${escape(entry.request.risk_assessment.level)}단계</span><span>${saved ? (saved.recommendation ? `후보 ${saved.recommendation.total}개` : '조회 실패') : '추천 대기'}</span><button type="button" class="text-button" data-analysis-index="${index}" ${analysisBatchRunning ? 'disabled' : ''}>${saved?.recommendation ? '결과 보기' : '분석 입력 보기'}</button></div>`;
+  }).join('');
+  $('#load-analysis').disabled = analysisBatchRunning || loading;
+  $('#stop-analysis-recommendations').disabled = !analysisBatchRunning;
+  updateRetryControls();
+}
+
+async function loadAnalysisInputs() {
+  if (analysisBatchRunning || loading) return;
+  $('#load-analysis').disabled = true;
+  try {
+    const response = await fetch('/api/welfare/analysis-inputs');
+    if (!response.headers?.get('content-type')?.includes('application/json')) throw new Error('분석 결과 수신 API가 없습니다. 최신 코드로 서버를 다시 실행해주세요.');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '분석 결과를 불러오지 못했습니다.');
+    if (data.schema_version !== 'analysis-welfare-inputs-0.1' || !Array.isArray(data.entries)) throw new Error('분석 연결 응답 형식을 확인해주세요.');
+    if (analysisInputs?.batch_id !== data.batch_id) { analysisResults.clear(); connectedAnalysisEntry = null; }
+    analysisInputs = data;
+    $('#analysis-input-status').textContent = `${data.period} · 완료 판정 ${data.entries.length}집단 · 부분판정 ${data.priority.partial_assessments.length}집단 · 보류 ${data.priority.held_cohorts.length}집단. 전체 실시간 실행은 최대 검색 ${data.entries.length * 2}회·Gemini ${data.entries.length}회입니다. 버튼을 눌러 순서대로 실행하세요.`;
+  } catch (error) {
+    analysisInputs = null;
+    analysisResults.clear();
+    connectedAnalysisEntry = null;
+    $('#analysis-input-status').textContent = error.message;
+  } finally { $('#load-analysis').disabled = false; renderAnalysisInputs(); updateRetryControls(); }
+}
+
+function useAnalysisEntry(entry) {
+  connectedAnalysisEntry = entry;
+  const target = entry.request.target;
+  $('#region').value = target.region;
+  $('#age').value = String(target.age_group);
+  $('#sex').value = target.sex;
+  $('#purpose').value = target.purpose;
+  $('#risk-input').value = JSON.stringify(entry.request.risk_assessment, null, 2);
+  document.querySelectorAll('[name="support-need"]').forEach((input) => { input.checked = entry.request.confirmed_support_needs.includes(input.value); });
+  filters = {region: target.region, age: target.age_group, sex: target.sex, purpose: target.purpose};
+}
+
+async function runAnalysisRecommendations() {
+  if (!analysisInputs || analysisBatchRunning || loading || Date.now() < retryAvailableAt) return;
+  analysisBatchRunning = true;
+  analysisStopRequested = false;
+  const mode = $('#search-mode').value;
+  const entries = analysisInputs.entries;
+  renderAnalysisInputs();
+  try {
+    for (let index = 0; index < entries.length; index++) {
+      if (analysisStopRequested) break;
+      const entry = entries[index];
+      const key = `${mode}:${entry.analysis_id}`;
+      if (analysisResults.get(key)?.recommendation) continue;
+      $('#analysis-input-status').textContent = `${index + 1}/${entries.length}집단 추천 중 · ${entry.request.target.region} · ${sexLabel(entry.request.target.sex)}. 현재 요청 후 중지할 수 있습니다.`;
+      useAnalysisEntry(entry);
+      $('#search-mode').value = mode;
+      const success = await queryResources();
+      analysisResults.set(key, {recommendation, responseRouting, planningContext, errorMessage, filters: {...filters}});
+      renderAnalysisInputs();
+      if (!success) { analysisStopRequested = true; break; } // 오류·한도 초과 시 자동 재시도하지 않는다.
+    }
+    const done = entries.filter((entry) => analysisResults.get(`${mode}:${entry.analysis_id}`)?.recommendation).length;
+    $('#analysis-input-status').textContent = `${entries.length}집단 중 ${done}집단 추천 완료${analysisStopRequested ? ' · 중지됨. 실행 버튼으로 미완료 집단만 다시 처리할 수 있습니다.' : ''} · 결과는 현재 화면 세션에서 보관합니다.`;
+  } finally {
+    analysisBatchRunning = false;
+    renderAnalysisInputs();
+  }
+}
+
+$('#load-analysis').addEventListener('click', loadAnalysisInputs);
+$('#run-analysis-recommendations').addEventListener('click', runAnalysisRecommendations);
+$('#stop-analysis-recommendations').addEventListener('click', () => { analysisStopRequested = true; });
+$('#analysis-targets').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-analysis-index]');
+  if (!button || loading || analysisBatchRunning) return;
+  const entry = analysisInputs.entries[Number(button.dataset.analysisIndex)];
+  useAnalysisEntry(entry);
+  const saved = analysisResults.get(`${$('#search-mode').value}:${entry.analysis_id}`);
+  recommendation = saved?.recommendation || null;
+  responseRouting = saved?.responseRouting || null;
+  planningContext = saved?.planningContext || null;
+  errorMessage = saved?.errorMessage || '';
+  resources = recommendation?.resources || [];
+  purposes = recommendation?.purposes || {};
+  selected.clear();
+  $('#planning-prompt').value = '';
+  renderResults();
+});
+$('#search-mode').addEventListener('change', renderAnalysisInputs);
+$('#filter-form').addEventListener('submit', (event) => { event.preventDefault(); if (!analysisBatchRunning) queryResources(); });
 
 $('#results').addEventListener('click', (event) => {
   if (event.target.closest('#retry-request')) { queryResources(); return; }
@@ -320,6 +427,7 @@ $('.skip-link').addEventListener('click', (event) => {
 window.addEventListener('hashchange', navigate);
 navigate();
 renderResults();
+loadAnalysisInputs();
 fetch('/api/welfare/status').then((response) => response.ok ? response.json() : Promise.reject()).then((status) => {
   $('#agent-status').textContent = status.configured ? `Tavily 검색 + Gemini 추천 · ${status.model}. 두 서비스의 무료 등급·한도를 유지해주세요.` : `키 설정 필요: ${[!status.tavily_configured && 'TAVILY_API_KEY', !status.gemini_configured && 'GEMINI_API_KEY'].filter(Boolean).join(', ')}. .env를 확인해주세요. 저장 자료 테스트는 키 없이 사용할 수 있습니다.`;
 }).catch(() => { $('#agent-status').textContent = 'API 서버 연결을 확인해주세요. python backend/server.py로 실행합니다.'; });

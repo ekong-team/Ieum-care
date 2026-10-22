@@ -187,3 +187,34 @@ test('0.2 성별을 API 요청과 기획 파일에 보존한다', async () => {
   assert.equal(payload.has_example_context, true);
   assert.ok(element('#results-title').textContent.includes('여성'));
 });
+
+test('1차 대상 자동 순차 실행은 근거를 전달하고 성공 결과를 재호출하지 않는다', async () => {
+  const {context, element} = screen();
+  await new Promise(setImmediate); // 초기 연결 확인 종료 후 실제 수신 흐름을 검사한다.
+  const entries = ['female','male'].map((sex, index) => ({analysis_id:sex, rank:index+1, request:{
+    target:{region:'춘천시',age_group:60,sex,purpose:'all'},confirmed_support_needs:[],
+    risk_assessment:{schema_version:'risk-input-0.2',sex,region:'춘천시',age_group:60,status:'complete',level:2,period:'2025-12',model_version:'test',is_example:true,signals:[],limitations:[]},
+    analysis_context:{profile:{target:{sex}},causes:[]}}}));
+  const batch = {schema_version:'analysis-welfare-inputs-0.1',batch_id:'test',period:'2025-12',entries,priority:{partial_assessments:[],held_cohorts:[]}};
+  const requests = [];
+  let failMale = true;
+  context.fetch = async (url, options) => {
+    if (url.endsWith('/analysis-inputs')) return {ok:true,headers:{get:()=> 'application/json'},json:async()=>batch};
+    const input = JSON.parse(options.body);
+    requests.push(input);
+    if (input.target.sex === 'male' && failMale) return {ok:false,headers:{get:()=> 'application/json'},json:async()=>({error:'일시 중단',response_routing:route('unavailable')})};
+    return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({schema_version:'welfare-0.4',is_demo:false,mode:'offline',resources:[],total:0,purposes:{},
+      risk_assessment:input.risk_assessment,analysis_context:input.analysis_context,
+      review:{confirmed_support_needs:[],summary:'',suggested_purposes:[],questions:[]},response_routing:route('no_candidates_found')})};
+  };
+  await vm.runInContext('loadAnalysisInputs();', context);
+  await vm.runInContext('runAnalysisRecommendations()', context);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].analysis_context.profile.target.sex, 'female');
+  assert.ok(element('#analysis-input-status').textContent.includes('중지됨'));
+  failMale = false;
+  await vm.runInContext('runAnalysisRecommendations()', context);
+  assert.equal(requests.length, 3); // 여성 성공 건을 재호출하지 않는다.
+  assert.equal(requests[2].target.sex, 'male');
+  assert.ok(element('#analysis-input-status').textContent.includes('2집단 추천 완료'));
+});

@@ -254,6 +254,34 @@ Gemini 2.5 Flash·Flash-Lite는 신규 프로젝트에서 제공 중단(404)이 
 
 공통 그래프와 추천 API의 복지 결과에는 `response_routing`도 포함한다. 기존 후보가 있으면 자원 연계와 예방·신규 기획을 함께 검토할 수 있다. 정상 조회의 후보 0개와 검색 실패를 구분하고, 둘 다 예방 기획 검토는 가능하지만 실제 자원 부족이나 예방 효과가 확인된 것으로 해석하지 않는다. 각 경로에 사유·관련 자원 id·추가 확인 사항을 전달한다. 화면에서는 기획 요청 준비 영역에 상태를 간단히 표시하고 확인 사항을 접어둔다. 검색 실패는 HTTP 오류 상태를 유지하고 `candidate_status: unavailable`을 전달하며, 잘못된 요청(400)에는 기획 경로를 붙이지 않는다. 화면 표시를 위한 추가 검색·LLM 호출은 없다. 실제 기획 Agent 전송·기획서 생성은 후속 작업이다.
 
+## 분석 결과 직접 수신과 1차 대상 일괄 추천 (2026-10-22)
+
+ZIP을 읽지 않는다. `prepare_analysis_inputs(bundle)`가 `run_analysis()`의 analysis-bundle-0.3 반환값을 받아 원본 해시·집단별 프로필·원인 근거·1차 순위의 일치를 검사하고 순위별 risk-input-0.2 요청과 welfare-context-0.1 맥락을 만든다. 1차 순위 정책을 변경하거나 2차 우선순위를 계산하지 않는다. complete 집단만 추천 대기열에 넣고 partial/held는 별도 수와 목록으로 보존한다. 합산 비교 목록을 남녀 순위에 추가하지 않는다. 이는 전달 일관성 검사이며 원본 데이터 전체 재계산 검증을 대체하지 않는다.
+
+- `POST /api/welfare/analysis-inputs`: 분석 반환 객체 자체를 JSON으로 전달한다(최대 16MiB). 유효한 새 결과만 서버 메모리에 반영하며 수신 자체로 외부 API를 호출하지 않는다.
+- `GET /api/welfare/analysis-inputs`: 직접 수신한 결과가 있으면 그것을 사용한다. 없으면 `data/processed/analysis_current/latest.json`이 가리키는 passed 스냅샷을 읽는다. 디렉터리 밖 경로·미완료 상태·해시 불일치를 거부한다. 파일이 없으면 404로 알리고 가상 결과를 넣지 않는다.
+- 직접 연결 함수: `publish_analysis_inputs(bundle)`가 별도 분석 프로세스에서 localhost 5175로 전달한다. 서버 재시작 시 메모리 수신 결과는 사라지므로 다시 전달하거나 저장된 최신 분석 결과를 불러온다.
+
+추천 서버를 먼저 실행한 뒤 기존 분석 명령에 `--send-to-welfare`를 추가하면, 분석 저장·검증 완료 후 자동으로 입력을 전달한다. 기존 분석 입력 파일은 별도로 준비되어 있어야 한다.
+
+```powershell
+python backend/server.py
+# 별도 터미널에서, 기존 분석 옵션과 함께 사용
+python scripts/integration/run_analysis_agent.py --period 202512 --send-to-welfare
+```
+
+Python에서 직접 연결할 때:
+
+```python
+from ai.welfare_agent.analysis_input import prepare_analysis_inputs, publish_analysis_inputs
+inputs = prepare_analysis_inputs(bundle)  # 같은 프로세스의 분석 반환값으로 다음 단계 입력 준비
+publish_analysis_inputs(bundle)          # 실행 중인 로컬 추천 서버에 전달
+```
+
+화면은 진입 시 연결을 확인하며 ‘최신 분석 불러오기’로 갱신한다. ‘1차 대상 순서대로 복지 추천’은 화면의 live/offline 방식으로 각 집단을 순차 실행한다. 집단 선택 없이 전체 완료 판정 대상을 처리하고, 행 선택은 분석 입력·이미 처리한 결과의 상세 보기다. 조회 완료 0개도 성공으로 보존하며 실패와 구분한다. 첫 오류·한도 초과 시 중지하고 자동 재시도하지 않는다. 중지 버튼은 진행 중 요청을 취소하지 않고 그 요청 이후에 멈춘다.
+
+성공 결과는 현재 화면 세션에서 batch_id·mode·analysis_id별로 재사용한다. 서버·화면 새로고침을 넘는 영구 결과 저장은 아직 없다. 같은 입력·방식에서 이어 실행하면 성공 집단은 건너뛰고 미완료 집단만 처리한다. 화면 새로고침 후 다시 실시간 실행하면 외부 API가 재호출될 수 있다. 이 구현은 수신·1차 목록·복지 추천 연결까지이며 2차 우선순위·프로그램 생성은 별도다.
+
 ## 기획 요청 파일 초안 (planning-request-0.1)
 
 사용 순서: 복지자원 조회 → 기존 자원 활용 시 자원 선택(예방·신규 기획은 선택 불필요) → 담당자 요청 작성(선택, 최대 2,000자) → 기획 요청 만들기 → 전달 데이터 미리보기 → JSON 내려받기. 기획서 생성이나 평가가 아니라 팀원의 기획 Agent에 전달할 입력을 준비하는 단계다.
