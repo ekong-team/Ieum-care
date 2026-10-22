@@ -213,7 +213,6 @@ main {
   font-size: 23px;
   line-height: 1;
   flex-shrink: 0;
-  font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
   box-shadow: 0 5px 12px #184e4015;
 }
 .brand strong {
@@ -964,26 +963,6 @@ dialog dd {
 }
 #planning-inbox-list .resource-card {
   border-top: 1px solid var(--border);
-}
-.support-needs {
-  border: 0;
-  border-top: 1px solid var(--border);
-  margin: 22px 0 0;
-  padding: 18px 0 0;
-  min-width: 0;
-}
-.support-needs legend {
-  font-size: 11px;
-  font-weight: 600;
-}
-.support-needs label {
-  font-size: 11px;
-  display: flex;
-  gap: 7px;
-  align-items: center;
-}
-.support-needs input {
-  accent-color: var(--green);
 }
 .review-context {
   padding: 18px 22px;

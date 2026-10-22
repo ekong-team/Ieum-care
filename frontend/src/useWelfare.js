@@ -28,7 +28,6 @@ export default function useWelfare() {
   const [records, setRecords] = useState(new Map());
   const recordsRef = useRef(new Map());
   const [filters, setFilters] = useState(initialFilters);
-  const [needs, setNeeds] = useState([]);
   const [entry, setEntry] = useState(null);
   const [current, setCurrent] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -125,7 +124,6 @@ export default function useWelfare() {
     if (busyRef.current || runningRef.current) return;
     setEntry(next);
     setFilters(filtersFor(next));
-    setNeeds(next.request.confirmed_support_needs || []);
     setCurrent(recordsRef.current.get(`live:${next.analysis_id}`) || null);
   }
 
@@ -133,7 +131,6 @@ export default function useWelfare() {
     setFilters((previous) => ({ ...previous, [key]: value }));
     if (["region", "age", "sex"].includes(key)) {
       setEntry(null);
-      setNeeds([]);
     }
   }
 
@@ -236,15 +233,14 @@ export default function useWelfare() {
         purpose: filters.purpose,
       },
       risk_assessment: entry?.request.risk_assessment || null,
-      confirmed_support_needs: needs,
+      // 화면에서 중복 입력하지 않는다. 연결된 팀원 입력만 보존하고 일반 탐색은 비운다.
+      confirmed_support_needs: entry?.request.confirmed_support_needs || [],
     };
     if (entry?.request.analysis_context)
       input.analysis_context = entry.request.analysis_context;
     const native =
       entry &&
-      filters.purpose === entry.request.target.purpose &&
-      JSON.stringify(needs) ===
-        JSON.stringify(entry.request.confirmed_support_needs)
+      filters.purpose === entry.request.target.purpose
         ? entry
         : null;
     return query(input, native);
@@ -272,7 +268,6 @@ export default function useWelfare() {
         );
         setEntry(next);
         setFilters(filtersFor(next));
-        setNeeds(next.request.confirmed_support_needs || []);
         if (!(await query(next.request, next))) {
           stopRef.current = true;
           break;
@@ -313,8 +308,6 @@ export default function useWelfare() {
     records,
     filters,
     changeFilter,
-    needs,
-    setNeeds,
     entry,
     current,
     busy,
