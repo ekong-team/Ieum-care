@@ -15,3 +15,5 @@
 - troubleshooting.md와 development_journal.md에 실제 기여·검증을 기록한다. AI 구현을 사용자 고안으로 기록하지 않는다.
 
 검증: 전체243개 통과,삭제한 도구 전용4개 시험 제외. 원본 재실행216개 상세 결과·24개 순위 동일,37개 함수/클래스 AST 동일. 외부API0회.
+
+최신 adaptive 검색 구현: research_decide→조건부research_search→research_check→제한내루프→interpret→first_priority. Gemini계획+검토최대2,Tavily최대3,질문별재검색1.264시험 통과·216건/24순위 재검증. 이번실제API0,모의응답과실제기록구분. 이전 기본focused실행은새방식실행으로간주하지않는다.

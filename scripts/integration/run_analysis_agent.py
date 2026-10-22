@@ -86,9 +86,9 @@ def main():
     parser.add_argument("--input-folder", type=Path, help="features.csv/sensitivity.csv/context.json을 가진 준비 폴더")
     parser.add_argument("--output", type=Path, default=ROOT / "data/processed/analysis_current")
     parser.add_argument("--mode", choices=("offline", "gemini"), default="offline")
-    parser.add_argument("--web-search", action="store_true", help="Gemini 검토 전에 Tavily 공식 자료 검색 1회")
-    parser.add_argument("--research-mode", choices=("basic", "focused"), default="basic",
-                        help="focused: 인구·경기·달력 검색 각1회(최대3회)와 Gemini 검토1회")
+    parser.add_argument("--web-search", action="store_true", help="분석 중 공식 자료 검색 허용. adaptive에서는 필요할 때만 검색")
+    parser.add_argument("--research-mode", choices=("adaptive", "basic", "focused"), default="adaptive",
+                        help="adaptive: 검색 필요 판단·조건부 검색/재검색. 검색최대3회·Gemini최대2회")
     parser.add_argument("--check-config", action="store_true", help="키 값 없이 Gemini/Tavily 설정 여부만 표시")
     parser.add_argument("--model")
     parser.add_argument("--analysis-id", help="실제 모델을 사용할 단일 집단. 전체 수치 계산은 동일하게 유지")

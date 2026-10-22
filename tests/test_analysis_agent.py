@@ -264,7 +264,7 @@ class ReviewTests(unittest.TestCase):
         first = run_analysis(data,{},[],period="202509")
         second = run_analysis(data,{},[],period="202509")
         self.assertEqual(first["bundle_hash"],second["bundle_hash"])
-        self.assertEqual([t["node"] for t in first["trace"]],["calculate","describe","interpret","first_priority"])
+        self.assertEqual([t["node"] for t in first["trace"]],["calculate","describe","research_decide","interpret","first_priority"])
 
 def write_fixture(folder):
     """실데이터가 없어도 실행·저장·재검산을 시험할 작은 입력."""

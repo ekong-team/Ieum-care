@@ -37,6 +37,7 @@ class GeminiAnalysisTests(unittest.TestCase):
         return run_analysis(dataset(), {}, [], period="202509")["cohorts"][-1]
 
     def provider(self, transport, **kwargs):
+        kwargs.setdefault("research_mode", "basic")
         return GeminiTavilyProvider(config=CONFIG, transport=transport, **kwargs)
 
     def test_search_then_model_single_call_and_no_raw_data_to_search(self):
@@ -135,7 +136,7 @@ class GeminiAnalysisTests(unittest.TestCase):
         self.assertEqual(execution["receipts"][0]["search_status"],"no_usable_results")
 
     def test_gemini_only_does_not_require_search_key(self):
-        provider=GeminiTavilyProvider(config=dict(GEMINI_API_KEY="fake"),use_search=False,
+        provider=GeminiTavilyProvider(config=dict(GEMINI_API_KEY="fake"),use_search=False,research_mode="basic",
             transport=lambda *args:model_response(dict(observation_ids=[],hypothesis_codes=[],question_codes=[],source_ids=[])))
         review,execution=review_cohort(self.cohort(),provider)
         self.assertEqual(review["status"],"fixture_only")

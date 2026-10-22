@@ -1,4 +1,4 @@
-"""계산 → 배경·가설 정리 → 선택적 모델 검토 → 1차 순위의 전체 실행 흐름."""
+"""계산 → 배경·가설 → 검색 판단·조건부 재검색 → 모델 검토 → 1차 순위."""
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langsmith import tracing_context
@@ -9,6 +9,7 @@ from ai.analysis_agent.inputs import digest, month_number
 from ai.analysis_agent.inputs import VERSION, LIMITATIONS, SENSITIVITY_SCENARIOS, DECLINE_THRESHOLD, SEVERE_THRESHOLD
 from ai.analysis_agent.priority import priority_for
 from ai.analysis_agent.model import review_cohort
+from ai.contracts.profile import TargetProfile
 
 class AnalysisState(TypedDict, total=False):
     rows: list[dict]
@@ -21,6 +22,7 @@ class AnalysisState(TypedDict, total=False):
     execution: dict
     trace: list[dict]
     bundle: dict
+    research: dict
 
 def build_analysis_graph(provider=None, model_analysis_id=None):
     """모델 함수는 실행 상태 바깥에서 주입한다. 계산·순위에 모델 의견을 넣지 않는다."""
@@ -48,7 +50,40 @@ def build_analysis_graph(provider=None, model_analysis_id=None):
         priority_for(cohorts, state["period"])
         return dict(cohorts=cohorts, trace=state["trace"] + [
             dict(node="describe", status="done", source="local_snapshot",
-                 external_search="tavily_in_interpret" if getattr(provider, "use_search", False) else "not_run")])
+                 external_search=("conditional_research_nodes" if adaptive else "tavily_in_interpret")
+                 if getattr(provider, "use_search", False) else "not_run")])
+
+    adaptive = getattr(provider, "research_mode", None) == "adaptive"
+
+    def research_decide(state):
+        if not adaptive:
+            research = dict(research_decision=dict(search_needed=False,
+                reason="외부 검색 비활성 또는 기존 단일 검토 모드입니다.", tasks=[]))
+        else:
+            cohort = next(c for c in state["cohorts"] if c["analysis_id"] == model_analysis_id)
+            research = provider.prepare_research(cohort)
+        decision = research["research_decision"]
+        return dict(research=research, trace=state["trace"] + [dict(
+            node="research_decide", status="done", search_needed=decision["search_needed"], reason=decision["reason"])])
+
+    def research_search(state):
+        cohort = next(c for c in state["cohorts"] if c["analysis_id"] == model_analysis_id)
+        research = provider.search_research(TargetProfile.model_validate(cohort["profile"]))
+        last = research["search_questions"][-1]
+        return dict(research=research, trace=state["trace"] + [dict(
+            node="research_search", status=last["status"], question_id=last["question_id"],
+            attempt=last["attempt"], query=last["query"])])
+
+    def research_check(state):
+        research = provider.check_research()
+        last = research["search_questions"][-1]
+        return dict(research=research, trace=state["trace"] + [dict(
+            node="research_check", status="candidate_found" if last["candidate_sufficient"] else "insufficient",
+            next_action=provider.research_next_action(), search_attempts=research["search_attempts"],
+            stop_reason=research.get("search_stop_reason"))])
+
+    def research_route(state):
+        return provider.research_next_action() if adaptive else "interpret"
 
     def interpret(state):
         execution = dict(provider_attempts=0, confirmed_llm_responses=0, model_receipts=[],
@@ -71,6 +106,7 @@ def build_analysis_graph(provider=None, model_analysis_id=None):
         execution["search_attempts"] = sum(r.get("search_attempts", 0) for r in execution["model_receipts"])
         execution["gemini_attempts"] = sum(r.get("gemini_attempts", 0) for r in execution["model_receipts"])
         execution["external_context_policy"] = "reference_only_no_numeric_import_no_risk_override"
+        execution["research_decision"] = state["research"]["research_decision"]
         return dict(cohorts=state["cohorts"], execution=execution, trace=trace)
 
     def rank(state):
@@ -103,11 +139,16 @@ def build_analysis_graph(provider=None, model_analysis_id=None):
         return dict(bundle=bundle, trace=trace)
 
     graph = StateGraph(AnalysisState)
-    for name, function in (("calculate",calculate), ("describe",describe), ("interpret",interpret), ("first_priority",rank)):
+    for name, function in (("calculate",calculate), ("describe",describe),
+                           ("research_decide",research_decide), ("research_search",research_search),
+                           ("research_check",research_check), ("interpret",interpret), ("first_priority",rank)):
         graph.add_node(name, function)
     graph.add_edge(START, "calculate")
     graph.add_edge("calculate", "describe")
-    graph.add_edge("describe", "interpret")
+    graph.add_edge("describe", "research_decide")
+    graph.add_conditional_edges("research_decide", research_route, ["research_search", "interpret"])
+    graph.add_edge("research_search", "research_check")
+    graph.add_conditional_edges("research_check", research_route, ["research_search", "interpret"])
     graph.add_edge("interpret", "first_priority")
     graph.add_edge("first_priority", END)
     return graph.compile()
