@@ -226,3 +226,38 @@ test('1차 대상 자동 순차 실행은 근거를 전달하고 성공 결과�
   await vm.runInContext('queryResources()', context);
   assert.equal(vm.runInContext("analysisResults.get('offline:male')", context), previous);
 });
+
+test('2차 검토는 0개·실패·미조회와 실행 방식을 구분하며 위험·순위를 변경하지 않는다', async () => {
+  const {context, element} = screen();
+  await new Promise(setImmediate);
+  vm.runInContext(`analysisInputs = {batch_id:'batch',period:'2025-12',entries:
+    ['found','empty','failed','pending'].map((id) => ({analysis_id:id,rank:1,request:{
+      target:{region:'춘천시',age_group:30,sex:'female',purpose:'all'},
+      risk_assessment:{level:4,period:'2025-12'}}}))};
+    analysisResults.clear();
+    analysisResults.set('live:found',{recommendation:{resources:[{id:'a',name:'자원',isolation_relevance:'direct',source:{url:'https://example.org'}}]}});
+    analysisResults.set('live:empty',{recommendation:{resources:[]}});
+    analysisResults.set('live:failed',{errorMessage:'HTTP 503'});`, context);
+  element('#search-mode').value = 'live';
+  const report = JSON.parse(vm.runInContext('JSON.stringify(buildSecondReview())', context));
+  assert.deepEqual(report.rows.map(row => row.lookup_status), ['candidates_found','no_candidates_found','unavailable','pending']);
+  assert.deepEqual(report.rows.map(row => row.candidate_count), [1,0,null,null]);
+  assert.equal(report.rows[0].ai_direct_relevance_count, 1);
+  assert.equal(report.rows[0].candidates[0].availability_status, 'needs_confirmation');
+  assert.equal(report.completed_cohorts, 2);
+  assert.equal(report.comparison_complete, false);
+  assert.ok(report.rows.every(row => row.first_priority_rank === 1 && row.risk_assessment.level === 4 && row.second_priority_rank === null));
+  vm.runInContext('renderSecondReview()', context);
+  assert.ok(element('#second-review-status').textContent.includes('2/4'));
+  let file;
+  context.URL.createObjectURL = blob => { file = blob; return 'blob:review'; };
+  element('#download-second-review').handlers.click();
+  assert.equal(JSON.parse(await file.text()).batch_id, 'batch');
+  element('#search-mode').value = 'offline';
+  const offline = vm.runInContext('buildSecondReview()', context);
+  assert.ok(offline.rows.every(row => row.lookup_status === 'pending'));
+  vm.runInContext(`analysisResults.set('offline:found',{recommendation:{resources:[]}}); analysisInputs.entries=analysisInputs.entries.slice(0,1)`, context);
+  assert.equal(vm.runInContext('buildSecondReview().comparison_complete', context), true);
+  vm.runInContext('analysisInputs=null; renderSecondReview()', context);
+  assert.equal(element('#second-review').hidden, true);
+});

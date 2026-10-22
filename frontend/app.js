@@ -286,6 +286,7 @@ async function queryResources() {
 }
 
 function renderAnalysisInputs() {
+  renderSecondReview();
   const panel = $('#analysis-targets');
   panel.replaceChildren();
   if (!analysisInputs) return;
@@ -298,6 +299,59 @@ function renderAnalysisInputs() {
   $('#load-analysis').disabled = analysisBatchRunning || loading;
   $('#stop-analysis-recommendations').disabled = !analysisBatchRunning;
   updateRetryControls();
+}
+
+// 추천의 개수로 위험도나 지원 순위를 재계산하지 않는다. 같은 배치·방식만 비교한다.
+function buildSecondReview() {
+  if (!analysisInputs) return null;
+  const mode = $('#search-mode').value;
+  const rows = analysisInputs.entries.map((entry) => {
+    const saved = analysisResults.get(`${mode}:${entry.analysis_id}`);
+    const result = saved?.recommendation;
+    const candidates = result?.resources || [];
+    const status = result ? (candidates.length ? 'candidates_found' : 'no_candidates_found')
+      : saved ? 'unavailable' : 'pending';
+    return {
+      analysis_id: entry.analysis_id, first_priority_rank: entry.rank,
+      target: entry.request.target, risk_assessment: entry.request.risk_assessment,
+      lookup_status: status, candidate_count: result ? candidates.length : null,
+      // AI의 연관성 분류이며 효과 검증이나 담당자 확인을 대신하지 않는다.
+      ai_direct_relevance_count: result && mode === 'live'
+        ? candidates.filter((item) => item.isolation_relevance === 'direct').length : null,
+      candidates: candidates.map((item) => ({id: item.id, name: item.name,
+        source_url: item.source?.url || null, age_match: item.age_match || 'unknown',
+        isolation_relevance: item.isolation_relevance || null,
+        eligibility_status: item.eligibility_status || 'needs_confirmation',
+        availability_status: item.availability_status || 'needs_confirmation',
+        reference_year: item.source?.reference_year || null})),
+      next_action: status === 'candidates_found' ? '기관에 실제 대상·운영·참여 가능 여부 확인 후 기존 자원 활용 또는 보완 기획'
+        : status === 'no_candidates_found' ? '검색 범위·대상 조건을 추가 조사하고 예방·신규 기획 검토'
+        : status === 'unavailable' ? '오류 확인 후 담당자가 조회 재실행 · 자원 부족 판단 보류'
+        : '복지 추천 조회 필요 · 자원 부족 판단 보류',
+      error: saved?.errorMessage || null,
+      second_priority_rank: null,
+    };
+  });
+  const completed = rows.filter((row) => ['candidates_found', 'no_candidates_found'].includes(row.lookup_status)).length;
+  return {schema_version: 'welfare-cohort-review-0.1', batch_id: analysisInputs.batch_id,
+    period: analysisInputs.period, mode, status: 'needs_human_review',
+    comparison_complete: rows.length > 0 && completed === rows.length,
+    completed_cohorts: completed, total_cohorts: rows.length,
+    policy: 'preserve-first-priority-no-automatic-reranking-v1',
+    limitations: ['화면 세션에 남은 같은 방식의 추천 결과만 비교합니다.',
+      '후보 미확보·조회 실패는 지역의 실제 자원 부재를 의미하지 않습니다.',
+      '자격·운영·수용 인원 및 미충족 수요 확인과 팀의 순위 기준 합의가 필요합니다.',
+      '부분 판정·보류 집단은 1차 추천 입력에서 제외되어 이 표에도 포함되지 않습니다.'], rows};
+}
+
+function renderSecondReview() {
+  const report = buildSecondReview();
+  $('#second-review').hidden = !report;
+  $('#download-second-review').disabled = !report || loading || analysisBatchRunning;
+  if (!report) { $('#second-review-table').replaceChildren(); return; }
+  $('#second-review-status').textContent = `${report.mode === 'live' ? '실시간 검색·AI 추천' : '저장 자료 테스트'} · ${report.completed_cohorts}/${report.total_cohorts}집단 조회 완료 · ${report.comparison_complete ? '전체 조회 완료 · 담당자 확인 필요' : '일부 미완료 · 전체 집단 비교 미완성'} · 2차 순위 미확정`;
+  const labels = {candidates_found:'후보 확보',no_candidates_found:'후보 미확보',unavailable:'조회 실패',pending:'미조회'};
+  $('#second-review-table').innerHTML = `<table class="cohort-review-table"><caption>1차 순위에 따른 복지 추천 결과와 다음 조치</caption><thead><tr><th scope="col">1차 순위·대상</th><th scope="col">추천 결과</th><th scope="col">다음 조치</th><th scope="col">상세</th></tr></thead><tbody>${report.rows.map((row, index) => `<tr><th scope="row">${escape(row.first_priority_rank)}순위 · ${escape(row.target.region)}<br>${escape(ageLabel(row.target.age_group))} · ${escape(sexLabel(row.target.sex))} · ${escape(row.risk_assessment.level)}단계</th><td>${labels[row.lookup_status]}${row.candidate_count === null ? '' : ` · ${row.candidate_count}개`}${row.ai_direct_relevance_count === null ? '' : `<br>AI 직접 연관 ${row.ai_direct_relevance_count}개`}</td><td>${escape(row.next_action)}</td><td><button type="button" class="text-button" data-analysis-index="${index}" ${loading || analysisBatchRunning ? 'disabled' : ''}>보기</button></td></tr>`).join('')}</tbody></table>`;
 }
 
 async function loadAnalysisInputs() {
@@ -363,7 +417,7 @@ async function runAnalysisRecommendations() {
 $('#load-analysis').addEventListener('click', loadAnalysisInputs);
 $('#run-analysis-recommendations').addEventListener('click', runAnalysisRecommendations);
 $('#stop-analysis-recommendations').addEventListener('click', () => { analysisStopRequested = true; });
-$('#analysis-targets').addEventListener('click', (event) => {
+function showAnalysisResult(event) {
   const button = event.target.closest('[data-analysis-index]');
   if (!button || loading || analysisBatchRunning) return;
   const entry = analysisInputs.entries[Number(button.dataset.analysisIndex)];
@@ -378,6 +432,19 @@ $('#analysis-targets').addEventListener('click', (event) => {
   selected.clear();
   $('#planning-prompt').value = '';
   renderResults();
+}
+$('#analysis-targets').addEventListener('click', showAnalysisResult);
+$('#second-review-table').addEventListener('click', showAnalysisResult);
+$('#download-second-review').addEventListener('click', () => {
+  if (loading || analysisBatchRunning) return;
+  const report = buildSecondReview();
+  if (!report) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], {type:'application/json'}));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `ieum-cohort-review-${report.period}-${report.mode}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 $('#search-mode').addEventListener('change', renderAnalysisInputs);
 $('#filter-form').addEventListener('submit', (event) => { event.preventDefault(); if (!analysisBatchRunning) queryResources(); });
