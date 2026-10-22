@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ai.analysis_agent.gemini_provider import (
+from ai.analysis_agent.model import (
     GeminiTavilyProvider, ExternalCallError, DEFAULT_MODEL, official_url, sources_from,
 )
 from ai.analysis_agent.workflow import run_analysis
-from ai.analysis_agent.reviewer import review_cohort
+from ai.analysis_agent.model import review_cohort
 from tests.test_analysis_agent import rows
 
 CONFIG = dict(GEMINI_API_KEY="test-key-not-real", TAVILY_API_KEY="test-search-not-real")
@@ -163,8 +163,8 @@ class GeminiAnalysisTests(unittest.TestCase):
 
     def test_http_errors_do_not_leak_headers_or_body(self):
         from urllib.error import HTTPError
-        from ai.analysis_agent.gemini_provider import post_json
-        with patch("ai.analysis_agent.gemini_provider.build_opener") as opener:
+        from ai.analysis_agent.model import post_json
+        with patch("ai.analysis_agent.model.build_opener") as opener:
             opener.return_value.open.side_effect=HTTPError("https://api.tavily.com/search",429,"secret-detail",None,None)
             with self.assertRaises(ExternalCallError) as result:
                 post_json("https://api.tavily.com/search",{"Authorization":"secret-key"},{})

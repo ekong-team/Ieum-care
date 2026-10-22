@@ -6,7 +6,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from ai.analysis_agent.recommendation import recommend_from_analysis
+from ai.analysis_agent.agent import recommend_from_analysis
 
 
 def main():

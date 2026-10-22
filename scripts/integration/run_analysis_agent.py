@@ -95,7 +95,7 @@ def main():
     parser.add_argument("--allow-external", action="store_true")
     args = parser.parse_args()
     if args.check_config:
-        from ai.analysis_agent.gemini_provider import config_status
+        from ai.analysis_agent.model import config_status
         print(json.dumps(config_status(), ensure_ascii=False, indent=2))
         return
     if args.web_search and args.mode != "gemini":
@@ -116,7 +116,7 @@ def main():
     if args.mode == "gemini":
         if not args.allow_external or not args.analysis_id:
             parser.error("Gemini 실행은 --allow-external --analysis-id가 필요합니다.")
-        from ai.analysis_agent.gemini_provider import GeminiTavilyProvider
+        from ai.analysis_agent.model import GeminiTavilyProvider
         try:
             provider = GeminiTavilyProvider(model=args.model, use_search=args.web_search, research_mode=args.research_mode)
         except ValueError as error:

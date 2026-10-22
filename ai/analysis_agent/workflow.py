@@ -4,11 +4,11 @@ from langgraph.graph import StateGraph, START, END
 from langsmith import tracing_context
 
 from ai.analysis_agent.assessment import assess
-from ai.analysis_agent.context import describe_cohort
+from ai.analysis_agent.interpretation import describe_cohort
 from ai.analysis_agent.inputs import digest, month_number
-from ai.analysis_agent.policy import VERSION, LIMITATIONS, SENSITIVITY_SCENARIOS, DECLINE_THRESHOLD, SEVERE_THRESHOLD
+from ai.analysis_agent.inputs import VERSION, LIMITATIONS, SENSITIVITY_SCENARIOS, DECLINE_THRESHOLD, SEVERE_THRESHOLD
 from ai.analysis_agent.priority import priority_for
-from ai.analysis_agent.reviewer import review_cohort
+from ai.analysis_agent.model import review_cohort
 
 class AnalysisState(TypedDict, total=False):
     rows: list[dict]

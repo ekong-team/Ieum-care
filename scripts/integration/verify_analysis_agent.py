@@ -7,11 +7,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from ai.analysis_agent.assessment import assess
-from ai.analysis_agent.context import describe_cohort
+from ai.analysis_agent.interpretation import describe_cohort
 from ai.analysis_agent.inputs import digest, file_hash, load_inputs, source_path
-from ai.analysis_agent.policy import SENSITIVITY_SCENARIOS
+from ai.analysis_agent.inputs import SENSITIVITY_SCENARIOS
 from ai.analysis_agent.priority import priority_for
-from ai.analysis_agent.reviewer import validate_review
+from ai.analysis_agent.model import validate_review
 from ai.contracts.profile import TargetProfile
 
 def require(condition, message):

@@ -8,7 +8,7 @@
 
 2026-10-20 시험 환경 기록: 전체 시험에 외부 API 차단기를 붙였을 때 localhost 요청도 함께 차단되어13개 로컬 HTTP 검사가 실패했다. AI가 루프백만 허용하도록 시험 실행기를 수정했지만 Windows 샌드박스의 WinError10013이 남아, 로컬 HTTP 권한이 있는 실행 환경에서 외부 연결 차단을 유지해 재검사했다. 제품 로직을 바꾸지 않았고 최종 실패0/오류0/공간3개생략이다. 설치 과정의 DNS 제한도 확인하고 공개 NumPy/Pandas 패키지를 네트워크 허용 환경에서 설치했다. 이 해결책을 사용자가 제안한 것으로 기록하지 않는다.
 
-2026-10-20 안내: 아래 과거 수정 Agent 실험과 옛 문서 경로는 현재 분석 실행에서 제외했다. 당시 기록은 Git 과거 이력 또는 로컬 .local-archive/branch_cleanup_20261020/items/에서 확인한다. 현재 실행은 hansu_analysis_pipeline.md를 기준으로 한다.
+2026-10-20 안내: 아래 과거 수정 Agent 실험과 옛 문서 경로는 현재 분석 실행에서 제외했다. 당시 기록은 Git 과거 이력 또는 로컬 .local-archive/branch_cleanup_20261020/items/에서 확인한다. 현재 분석 기준은 analysis.md와 ai/analysis_agent/README.md를 참고한다.
 
 # 트러블슈팅 기록
 

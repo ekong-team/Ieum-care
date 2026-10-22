@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
-from ai.analysis_agent.reviewer import EvidenceReview
+from ai.analysis_agent.model import EvidenceReview
 
 QUESTIONS = {
     "population": "주민 인구·구성 변화가 함께 나타났는가?",
@@ -89,7 +89,7 @@ def source_scope(source, profile, question_id):
 
 
 def collect_context(profile, transport, key, receipt):
-    from ai.analysis_agent.gemini_provider import sources_from, ExternalCallError
+    from ai.analysis_agent.model import sources_from, ExternalCallError
     receipt.update(research_mode="focused", temporal_use="retrospective_not_historical_live_backtest",
                    search_questions=[], sources=[], search_usage={"credits": 0})
     plans = search_plan(profile)

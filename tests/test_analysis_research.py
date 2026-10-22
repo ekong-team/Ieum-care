@@ -2,7 +2,7 @@
 import json
 import unittest
 from copy import deepcopy
-from ai.analysis_agent.gemini_provider import GeminiTavilyProvider, ExternalCallError
+from ai.analysis_agent.model import GeminiTavilyProvider, ExternalCallError
 from ai.analysis_agent.research import source_scope, search_plan, FocusedSelection, check_findings, explain_bundle, validate_research_receipt
 from ai.analysis_agent.workflow import run_analysis
 from ai.contracts.profile import TargetProfile

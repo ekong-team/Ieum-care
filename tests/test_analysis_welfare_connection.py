@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from ai.analysis_agent.workflow import run_analysis
-from ai.analysis_agent.recommendation import recommendation_request, recommend_from_analysis
+from ai.analysis_agent.agent import recommendation_request, recommend_from_analysis
 from ai.welfare_agent.recommender import validate_request, age_overlap
 from backend.server import create_server
 from tests.test_analysis_sex import sex_rows

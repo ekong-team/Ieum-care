@@ -11,8 +11,8 @@ from ai.analysis_agent.assessment import assess
 from ai.analysis_agent.inputs import digest, number, load_inputs, file_hash
 from ai.analysis_agent.interpretation import profile_for, hypotheses_for, team_causes_for
 from ai.analysis_agent.priority import priority_for
-from ai.analysis_agent.reviewer import review_cohort
-from ai.analysis_agent.context import describe_cohort, background_for
+from ai.analysis_agent.model import review_cohort
+from ai.analysis_agent.interpretation import describe_cohort, background_for
 from ai.analysis_agent.workflow import run_analysis
 
 def rows(months, cards, movements, filtered=None):
@@ -268,7 +268,7 @@ class ReviewTests(unittest.TestCase):
 
 def write_fixture(folder):
     """실데이터가 없어도 실행·저장·재검산을 시험할 작은 입력."""
-    from ai.analysis_agent.policy import KEYS,CARD,MOVEMENT,FILTERED
+    from ai.analysis_agent.inputs import KEYS,CARD,MOVEMENT,FILTERED
     feature = folder/"features.csv"
     sensitivity = folder/"sensitivity.csv"
     packet = folder/"context.json"
@@ -288,16 +288,16 @@ def write_fixture(folder):
     packet.write_text(json.dumps(dict(schema_version="submission-review-context-v1",records=[])),encoding="utf-8")
     loaded,contexts,manifest = load_inputs(feature,sensitivity,packet)
     bundle = run_analysis(loaded,contexts,manifest,period="202509")
-    policy = Path(__file__).resolve().parents[1]/"ai/analysis_agent/policy.py"
-    bundle["implementation_manifest"] = [dict(path="ai/analysis_agent/policy.py",sha256=file_hash(policy))]
+    policy = Path(__file__).resolve().parents[1]/"ai/analysis_agent/inputs.py"
+    bundle["implementation_manifest"] = [dict(path="ai/analysis_agent/inputs.py",sha256=file_hash(policy))]
     bundle.pop("bundle_hash")
     bundle["bundle_hash"] = digest(bundle)
     return bundle,contexts
 
 class PublicationTests(unittest.TestCase):
     def test_model_questions_reach_team_engine_without_changing_risk(self):
-        from ai.analysis_agent.handoff import target_profile, make_cause_engine
-        from ai.analysis_agent.reviewer import QUESTION_TEXT
+        from ai.analysis_agent.agent import target_profile, make_cause_engine
+        from ai.analysis_agent.model import QUESTION_TEXT
         def provider(system,payload):
             return dict(proposal=dict(observation_ids=["E1"],hypothesis_codes=["C0_unknown"],question_codes=["population_scope"]),
                         provenance=dict(kind="fixture"))
@@ -309,7 +309,7 @@ class PublicationTests(unittest.TestCase):
         self.assertIn(QUESTION_TEXT["population_scope"],causes[0].questions)
 
     def test_tampered_model_selection_cannot_enter_team_engine(self):
-        from ai.analysis_agent.handoff import make_cause_engine
+        from ai.analysis_agent.agent import make_cause_engine
         bundle = run_analysis(rows(["202508","202509"],[3100,3000],[None,0]),{},[],period="202509")
         review = bundle["cohorts"][1]["interpretation"]["model_review"]
         review.update(status="executed",selected_observation_ids=["E999"])
@@ -317,7 +317,7 @@ class PublicationTests(unittest.TestCase):
             make_cause_engine(bundle)
 
     def test_team_engine_accepts_exact_profile_and_returns_shared_cause_models(self):
-        from ai.analysis_agent.handoff import target_profile, make_cause_engine
+        from ai.analysis_agent.agent import target_profile, make_cause_engine
         bundle = run_analysis(rows(["202508","202509"],[3100,3000],[None,0]),{},[],period="202509")
         engine = make_cause_engine(bundle)
         profile = target_profile(bundle,"202509_32010_30G")
@@ -327,7 +327,7 @@ class PublicationTests(unittest.TestCase):
         self.assertTrue(engine(None,profile)[0].questions)
 
     def test_team_engine_rejects_changed_analysis(self):
-        from ai.analysis_agent.handoff import target_profile, make_cause_engine
+        from ai.analysis_agent.agent import target_profile, make_cause_engine
         bundle = run_analysis(rows(["202508","202509"],[3100,3000],[None,0]),{},[],period="202509")
         engine = make_cause_engine(bundle)
         profile = target_profile(bundle,"202509_32010_30G")

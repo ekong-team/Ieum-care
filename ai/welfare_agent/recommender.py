@@ -75,7 +75,7 @@ def validate_risk(risk, target):
     if risk is None:
         return
     if isinstance(risk, dict) and risk.get("schema_version") == "risk-input-0.2":
-        from ai.analysis_agent.welfare_handoff import WelfareRequest02
+        from ai.analysis_agent.agent import WelfareRequest02
         WelfareRequest02.model_validate({"target": target, "risk_assessment": risk})
         return
     if "sex" in target:

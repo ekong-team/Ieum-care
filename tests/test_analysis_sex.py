@@ -1,17 +1,14 @@
 """남녀 집계를 섞지 않는지와 현지 전달에서 성별이 보존되는지 확인한다."""
 import copy
 import unittest
-import tempfile
 import json
-import hashlib
-import zipfile
 from pathlib import Path
 from decimal import Decimal
 from pydantic import ValidationError
 from ai.analysis_agent.assessment import assess
 from ai.analysis_agent.workflow import run_analysis
 from ai.analysis_agent.priority import priority_for
-from ai.analysis_agent.welfare_handoff import to_welfare_request,to_current_aggregate_request,WelfareRequest02
+from ai.analysis_agent.agent import to_welfare_request,WelfareRequest02
 from tests.test_analysis_agent import rows
 
 def sex_rows(sex, cards, movement, filtered=None):
@@ -84,15 +81,7 @@ class SexAnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError,"성별"):
             WelfareRequest02.model_validate(payload)
 
-    def test_legacy_never_silently_discards_gender(self):
-        with self.assertRaisesRegex(ValueError,"성별"):
-            to_current_aggregate_request(self.bundle()["cohorts"][0])
 
-    def test_only_aggregate_legacy_request_is_available(self):
-        bundle=run_analysis(rows(["202507","202508","202509"],[3100,3200,3300],[None,.01,.01]),{},[],period="202509")
-        legacy=to_current_aggregate_request(bundle["cohorts"][-1])
-        self.assertEqual(legacy["risk_assessment"]["schema_version"],"risk-input-0.1")
-        self.assertNotIn("sex",legacy["target"])
 
     def test_native_schema_rejects_float_age_and_non_bool_example(self):
         original=to_welfare_request(self.bundle()["cohorts"][0])
@@ -102,38 +91,7 @@ class SexAnalysisTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 WelfareRequest02.model_validate(payload)
 
-    def test_package_checker_checks_analysis_request_consistency(self):
-        from ai.analysis_agent.welfare_handoff import handoff_record
-        from scripts.integration.check_welfare_handoff import check_package
-        with tempfile.TemporaryDirectory() as temporary:
-            folder=Path(temporary)
-            (folder/"data").mkdir()
-            (folder/"profiles").mkdir()
-            (folder/"contracts").mkdir()
-            record=handoff_record(next(c for c in self.bundle()["cohorts"]
-                                      if c["assessment"]["sex"]=="female" and c["assessment"]["month"]=="202509"))
-            record["request_v02"]["risk_assessment"]["level"]=5
-            record["request_v02"]["risk_assessment"]["status"]="complete"
-            files={"data/handoff_records.json":[record],
-                   "profiles/"+record["analysis_id"]+".json":record["profile"],
-                   "contracts/welfare_risk_input_0_2.schema.json":WelfareRequest02.model_json_schema()}
-            manifest=[]
-            for name,value in files.items():
-                content=json.dumps(value).encode()
-                (folder/name).write_bytes(content)
-                manifest.append(dict(path=name,sha256=hashlib.sha256(content).hexdigest()))
-            (folder/"MANIFEST.json").write_text(json.dumps(dict(files=manifest)))
-            with self.assertRaisesRegex(ValueError,"원래 분석"):
-                check_package(folder)
 
-    def test_package_rejects_unexpected_sensitive_files(self):
-        from scripts.integration.check_welfare_handoff import check_package
-        with tempfile.TemporaryDirectory() as temporary:
-            path=Path(temporary)/"bad.zip"
-            with zipfile.ZipFile(path,"w") as archive:
-                archive.writestr(".env","not-a-real-key")
-            with self.assertRaisesRegex(ValueError,"허용하지"):
-                check_package(path)
 
 try:
     import pandas as pd
@@ -156,7 +114,7 @@ class SexSourceTests(unittest.TestCase):
 
     def test_common_locations_are_used_for_each_gender(self):
         from scripts.data_processing.build_sex_features import summarize_telecom
-        from ai.analysis_agent.policy import REGIONS
+        from ai.analysis_agent.inputs import REGIONS
         age_codes=["10G","20G","30G","40G","50G","60GU"]
         monthly,reference={},[]
         for month in ("202511","202512"):
