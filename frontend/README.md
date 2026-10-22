@@ -10,6 +10,8 @@
 
 ## 실행
 
+분석 입력·배경자료가 아직 없다면 프로젝트 루트에서 먼저 `python scripts/integration/prepare_analysis_welfare.py`를 실행한다. 최초 공식 인구 CSV 수집에는 `--allow-download`를 추가한다. 기존 제공 원본은 `data/raw`에 있어야 한다. 이 명령은 전처리부터 검증된 분석 결과·1차 대상 입력까지 생성하며 Gemini나 실제 복지 검색은 실행하지 않는다. 세 CSV/JSON을 팀원에게 따로 받을 필요가 없다.
+
 프로젝트 최상위 폴더에서 실행한다.
 
 ```powershell
