@@ -143,6 +143,8 @@ test("초기 진입에는 외부 추천 호출이 없고 테스트용 조작은 
   expect(posts).toHaveLength(0);
   expect(screen.queryByText("저장 자료 조회 · 테스트용")).toBeNull();
   expect(screen.queryByText("예시 입력 채우기")).toBeNull();
+  expect(screen.queryByRole("checkbox")).toBeNull();
+  expect(screen.getByLabelText("지원 목적")).toBeTruthy();
   expect(
     screen.queryByRole("textbox", { name: "위험도 결과 JSON (선택)" }),
   ).toBeNull();
@@ -226,6 +228,25 @@ test("선택 자원·담당자 프롬프트를 검토한 뒤 서버 전달함에
   await user.click(screen.getByRole("link", { name: "프로그램 기획" }));
   await screen.findByText(/1건 저장됨/);
   expect(inbox[0].agent_connected).toBe(false);
+});
+
+test("팀원 입력의 지원 필요는 보존하되 다른 집단으로 바꾸면 전달하지 않는다", async () => {
+  const originalFetch = globalThis.fetch;
+  const connectedBatch = structuredClone(batch);
+  connectedBatch.entries[0].request.confirmed_support_needs = ["connection"];
+  vi.stubGlobal("fetch", (path, options) => path === "/api/welfare/analysis-inputs"
+    ? Promise.resolve(response(connectedBatch)) : originalFetch(path, options));
+  const user = userEvent.setup();
+  await load();
+  await selectFirst(user);
+  await user.click(screen.getByRole("button", {name:"복지자원 추천받기 →"}));
+  await screen.findByText("근거를 갖춘 후보를 제시하지 못했습니다.");
+  expect(posts[0].confirmed_support_needs).toEqual(["connection"]);
+  await user.selectOptions(screen.getByLabelText("대상 지역"), "강남구");
+  await user.click(screen.getByRole("button", {name:"복지자원 추천받기 →"}));
+  await waitFor(() => expect(posts).toHaveLength(2));
+  expect(posts[1].confirmed_support_needs).toEqual([]);
+  expect(posts[1].risk_assessment).toBeNull();
 });
 
 test("잘못된 요청 실패에는 기획을 허용하지 않고 UI에서 입력 문자열을 실행하지 않는다", async () => {

@@ -181,7 +181,7 @@ export function AnalysisPanels({ model }) {
 }
 
 export function Filters({ model }) {
-  const { filters, needs, entry, busy, running, retrySeconds } = model;
+  const { filters, entry, busy, running, retrySeconds } = model;
   const disabled = busy || running || model.analysisLoading;
   return (
     <aside className="filters panel">
@@ -248,28 +248,6 @@ export function Filters({ model }) {
             </option>
           ))}
         </select>
-        <fieldset className="support-needs" disabled={disabled}>
-          <legend>담당자가 확인한 지원 필요 (선택)</legend>
-          <p className="muted">
-            알고 있는 추가 정보를 AI 판단의 참고 자료로 전달합니다.
-          </p>
-          {["connection", "daily", "wellbeing", "economic"].map((key) => (
-            <label key={key}>
-              <input
-                type="checkbox"
-                checked={needs.includes(key)}
-                onChange={(e) =>
-                  model.setNeeds(
-                    e.target.checked
-                      ? [...needs, key]
-                      : needs.filter((need) => need !== key),
-                  )
-                }
-              />
-              {purposeLabels[key]}
-            </label>
-          ))}
-        </fieldset>
         <div className="context-note">
           <div>
             <strong>{entry ? "분석 결과 연결됨" : "일반 탐색"}</strong>
