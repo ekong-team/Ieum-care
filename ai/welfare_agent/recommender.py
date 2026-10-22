@@ -1,6 +1,7 @@
 """공식 안내에 근거한 복지자원 후보 조회. 개인 자격·효과·위험도는 판단하지 않는다."""
 
 import json
+from copy import deepcopy
 import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -81,7 +82,7 @@ def validate_risk(risk, target):
         raise ValueError("지원하지 않는 위험도 입력 버전입니다.")
     if risk["schema_version"] == RISK_SCHEMA_VERSION:
         # 생산자 계약을 그대로 검사한다. 성별을 제거해 합산으로 변환하지 않는다.
-        from ai.analysis_agent.welfare_handoff import WelfareRequest02
+        from ai.analysis_agent.agent import WelfareRequest02
         WelfareRequest02.model_validate({"target": target, "risk_assessment": risk, "confirmed_support_needs": []})
     elif target.get("sex", "all") != "all":
         raise ValueError("기존 risk-input-0.1은 남녀 합산 조회만 지원합니다. 성별 분석은 0.2를 사용하세요.")
@@ -241,6 +242,7 @@ def recommend(payload):
         "recommendation_method": "official_candidate_review_v1",
         "catalog_version": "official-seed-2026-10-16",
         "target": target,
+        **({"analysis_context": deepcopy(payload["analysis_context"])} if "analysis_context" in payload else {}),
         "risk_assessment": payload.get("risk_assessment"),
         "has_example_context": bool(payload.get("risk_assessment") and payload["risk_assessment"]["is_example"]),
         "review": review,

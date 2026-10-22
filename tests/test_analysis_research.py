@@ -2,7 +2,7 @@
 import json
 import unittest
 from copy import deepcopy
-from ai.analysis_agent.gemini_provider import GeminiTavilyProvider, ExternalCallError
+from ai.analysis_agent.model import GeminiTavilyProvider, ExternalCallError
 from ai.analysis_agent.research import source_scope, search_plan, FocusedSelection, check_findings, explain_bundle, validate_research_receipt
 from ai.analysis_agent.workflow import run_analysis
 from ai.contracts.profile import TargetProfile
@@ -58,6 +58,25 @@ class FocusedResearchTests(unittest.TestCase):
         scope=source_scope(source,self.profile(),"population")
         self.assertTrue(scope["listing_page"])
         self.assertEqual(scope["status"],"discovery_only")
+
+    def test_page_modification_date_is_not_statistics_period(self):
+        source = self.source()
+        source.update(title="기후 | 춘천시청", snippet="최종수정일 : 2025-09-10 주민등록 인구현황")
+        scope = source_scope(source, self.profile(), "population")
+        self.assertFalse(scope["period_text_match"])
+        self.assertEqual(scope["status"], "discovery_only")
+
+    def test_navigation_words_do_not_turn_climate_page_into_population_evidence(self):
+        source = self.source()
+        source.update(title="기후 | 춘천시청", snippet="2025년 9월 시정정보 고시/공고 채용정보 주민등록인구현황")
+        scope = source_scope(source, self.profile(), "population")
+        self.assertFalse(scope["topic_text_match"])
+        self.assertEqual(scope["status"], "discovery_only")
+
+    def test_actual_statistics_period_survives_metadata_removal(self):
+        source = self.source()
+        source["snippet"] += " 최종수정일 : 2026-10-22 시정정보 고시/공고 채용정보"
+        self.assertEqual(source_scope(source, self.profile(), "population")["status"], "reference_candidate")
 
     def test_national_holiday_can_be_applicable_without_region_text(self):
         source=dict(url="https://astro.kasi.re.kr/calendar/2025",title="2025년 9월 공휴일",snippet="전국 공휴일 월력요항")

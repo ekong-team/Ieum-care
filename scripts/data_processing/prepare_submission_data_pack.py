@@ -35,7 +35,7 @@ def main():
         included.append(dict(path=target.relative_to(DEST).as_posix(), source=relative,
                              category=category, bytes=target.stat().st_size, sha256=digest(target)))
 
-    for relative in ['docs/hansu_analysis_pipeline.md', 'docs/analysis_sex_results_20261019.md',
+    for relative in ['docs/analysis.md',
                      'docs/literature_and_evidence.md', 'docs/spatial_validation.md',
                      'data/processed/agent_activity_evidence.json',
                      'data/processed/activity_review_levels.csv',

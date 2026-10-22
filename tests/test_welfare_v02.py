@@ -9,7 +9,7 @@ from tests.test_welfare_live_agent import URL, message
 from ai.analysis_agent.assessment import assess
 from ai.analysis_agent.inputs import digest
 from ai.analysis_agent.interpretation import profile_for
-from ai.analysis_agent.welfare_handoff import to_welfare_request
+from ai.analysis_agent.agent import to_welfare_request
 from ai.welfare_agent.recommender import validate_request, recommend, age_overlap
 from ai.welfare_agent.live_agent import recommend_live, SEARCH_CACHE
 
@@ -57,6 +57,8 @@ class WelfareV02Tests(unittest.TestCase):
             validate_request(legacy)
         legacy['target'].pop('sex')
         validate_request(legacy)  # 이전 버전은 성별 미지정 합산으로만 수용한다.
+        legacy['target']['sex'] = 'all'
+        validate_request(legacy)  # 새 화면이 합산을 명시해도 이전 입력은 계속 지원한다.
 
     def test_ten_means_ten_to_nineteen_not_under_twenty(self):
         self.assertEqual(age_overlap(10, [{'min': 0, 'max': 9}]), 'none')

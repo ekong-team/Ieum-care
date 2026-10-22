@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts/data_processing"))
 from data_contract import AGES as SOURCE_AGES, MONTHS, require_keys, require_numbers
 from industry_classification import classify_industries
 from ai.analysis_agent.inputs import file_hash
-from ai.analysis_agent.policy import REGIONS, AGES, CARD, MOVEMENT, FILTERED, age_code
+from ai.analysis_agent.inputs import REGIONS, AGES, CARD, MOVEMENT, FILTERED, age_code
 
 KEYS = ["월", "지역", "연령대", "성별"]
 LOCATION = ["BLOCK_CD", "X_COORD", "Y_COORD"]

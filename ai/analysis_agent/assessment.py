@@ -2,7 +2,7 @@
 from collections import defaultdict
 from calendar import monthrange
 from decimal import Decimal
-from ai.analysis_agent.policy import REGIONS, AGES, DEFAULT_BASIS, DECLINE_THRESHOLD, SEVERE_THRESHOLD, age_code
+from ai.analysis_agent.inputs import REGIONS, AGES, DEFAULT_BASIS, DECLINE_THRESHOLD, SEVERE_THRESHOLD, age_code
 from ai.analysis_agent.inputs import number, month_number, validate_rows
 
 def tri_and(*values):

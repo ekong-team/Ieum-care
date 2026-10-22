@@ -1,6 +1,6 @@
 """위험 단계만으로 1차 검토 순위를 정한다. 복지자원·모델 의견은 사용하지 않는다."""
 from ai.analysis_agent.inputs import month_number
-from ai.analysis_agent.policy import REGIONS, AGES, VERSION
+from ai.analysis_agent.inputs import REGIONS, AGES, VERSION
 from ai.analysis_agent.interpretation import profile_for
 from ai.contracts.profile import TargetProfile
 

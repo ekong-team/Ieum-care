@@ -166,10 +166,8 @@ AI를 활용해 신규 프로그램 또는 개선안을 제안한다.
 - Scikit-learn
 - LLM / RAG
 
-## 한수 분석 작업
+## 데이터 분석 에이전트
 
-현재 분석은 성별 집단의 활동 위축 단계·근거·가설과 위험 단계 기준1차 우선순위까지 담당한다. 실행 파일은 scripts/integration/run_analysis_agent.py, 파이썬 모듈 진입점은 ai/analysis_agent/workflow.py의 run_analysis()다. Gemini·Tavily는 선택적으로 연결하며 기본 실행은 API를 호출하지 않는다.
+통신·카드 데이터를 성별로 분석해 활동 위축 검토 단계, 근거·원인 가설,1차 우선순위를 생성한다. 구현은 ai/analysis_agent, 실행은 scripts/integration/run_analysis_agent.py다. 기본 실행은 외부 API를 호출하지 않는다.
 
-원본→정제→성별 분석→단계→순위→다음 Agent 입력의 파일별 설명은 [전체 분석 처리 과정](docs/hansu_analysis_pipeline.md), 환경은 [실행 환경](docs/agent_environment.md), 정리 내용은 [파일 정리 기록](docs/branch_cleanup_20261020.md)을 참고한다.
-
-성별을 보존한 risk-input-0.2를 한수의 기준 출력으로 확정했고, 현지가 수신부를 이에 맞춘다. 코드 병합과 전체 서비스 연결 완료는 구분한다. 과거 독립 수정 에이전트 실험은 현재 분석 경로에서 제외했다.
+[파일 구성·실행](ai/analysis_agent/README.md) · [분석 기준](docs/analysis.md)
