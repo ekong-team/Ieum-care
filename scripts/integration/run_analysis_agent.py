@@ -79,6 +79,7 @@ def save_results(bundle, contexts, folder):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--send-to-welfare', action='store_true', help='분석 완료 후 로컬 복지 추천 서버로 결과 전달. 추천 API는 실행하지 않음')
     parser.add_argument("--features", type=Path)
     parser.add_argument("--sensitivity", type=Path)
     parser.add_argument("--context", type=Path)
@@ -132,6 +133,12 @@ def main():
                                          for path in implementation_files]
     bundle["bundle_hash"] = digest(bundle)
     print(json.dumps(save_results(bundle, contexts, args.output), ensure_ascii=False, indent=2))
+    if args.send_to_welfare:
+        from ai.welfare_agent.analysis_input import publish_analysis_inputs
+        try:
+            print(json.dumps({'welfare_input': publish_analysis_inputs(bundle)}, ensure_ascii=False))
+        except (OSError, ValueError) as error:
+            raise SystemExit('분석 결과는 저장됐지만 로컬 추천 서버 연결에 실패했습니다. 서버 실행 후 화면에서 최신 분석을 불러와주세요.') from error
 
 if __name__ == "__main__":
     main()
