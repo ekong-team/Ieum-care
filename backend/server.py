@@ -7,6 +7,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import sys
+import socket
 from threading import BoundedSemaphore
 from copy import deepcopy
 
@@ -22,12 +23,26 @@ from ai.welfare_agent.planning_handoff import PlanningInbox  # noqa: E402
 LIVE_SLOT = BoundedSemaphore(1)
 
 
+class LocalServer(ThreadingHTTPServer):
+    # Windows에서 SO_REUSEADDR로 같은 포트의 서버가 중복 실행되는 것을 막는다.
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if sys.platform == 'win32':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def unavailable_routing():
     """HTTP 오류에서도 후보 0개와 조회 실패를 구분해 전달한다."""
     return attach_response_routes(ExistingResources(status="unavailable")).response_routing.model_dump(mode="json")
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # Windows의 파일 연결/레지스트리 설정과 무관하게 ES 모듈을 실행 가능한 형식으로 보낸다.
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map,
+                      '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css'}
+
     def do_GET(self):
         if self.path == '/api/planning/requests':
             try:
@@ -152,7 +167,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def create_server(port=5175, *, planning_root=None):
     # React 빌드 결과만 제공한다. 소스·설정·원본 데이터는 정적 경로에 포함하지 않는다.
-    server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend/dist")))
+    server = LocalServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend/dist")))
     server.analysis_inputs = None
     server.planning_inbox = PlanningInbox(planning_root or ROOT / 'data/processed/planning_requests')
     return server
@@ -164,6 +179,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     with create_server(args.port) as server:
         print(f"Ieum care: http://127.0.0.1:{args.port}/#recommendations", flush=True)
+        print(f"React build: {ROOT / 'frontend/dist'}", flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
