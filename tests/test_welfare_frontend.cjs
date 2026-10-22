@@ -208,6 +208,10 @@ test('1차 대상 자동 순차 실행은 근거를 전달하고 성공 결과�
       review:{confirmed_support_needs:[],summary:'',suggested_purposes:[],questions:[]},response_routing:route('no_candidates_found')})};
   };
   await vm.runInContext('loadAnalysisInputs();', context);
+  // 먼저 단건 실시간 경로로 확인한 결과도 목록에 남아 일괄 실행에서 재호출하지 않는다.
+  await vm.runInContext('useAnalysisEntry(analysisInputs.entries[0]); queryResources()', context);
+  assert.equal(requests.length, 1);
+  assert.ok(element('#analysis-targets').innerHTML.includes('결과 보기'));
   await vm.runInContext('runAnalysisRecommendations()', context);
   assert.equal(requests.length, 2);
   assert.equal(requests[0].analysis_context.profile.target.sex, 'female');
@@ -217,4 +221,8 @@ test('1차 대상 자동 순차 실행은 근거를 전달하고 성공 결과�
   assert.equal(requests.length, 3); // 여성 성공 건을 재호출하지 않는다.
   assert.equal(requests[2].target.sex, 'male');
   assert.ok(element('#analysis-input-status').textContent.includes('2집단 추천 완료'));
+  const previous = vm.runInContext("analysisResults.get('offline:male')", context);
+  element('#purpose').value = 'connection';
+  await vm.runInContext('queryResources()', context);
+  assert.equal(vm.runInContext("analysisResults.get('offline:male')", context), previous);
 });

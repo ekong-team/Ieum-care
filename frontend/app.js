@@ -205,6 +205,7 @@ function preparePlanningRequest(planningType) {
 
 async function queryResources() {
   if (loading || Date.now() < retryAvailableAt) return;
+  let analysisResultKey = null;
   filters = { region: $('#region').value, age: Number($('#age').value), sex: $('#sex').value, purpose: $('#purpose').value };
   requestedMode = $('#search-mode').value;
   loading = true;
@@ -231,6 +232,12 @@ async function queryResources() {
     if (connectedAnalysisEntry && JSON.stringify(risk) === JSON.stringify(connectedAnalysisEntry.request.risk_assessment)
         && ['region', 'age_group', 'sex'].every((key) => input.target[key] === connectedAnalysisEntry.request.target[key])) {
       input.analysis_context = connectedAnalysisEntry.request.analysis_context;
+      // 원래 1차 대상 요청과 조건이 같은 단건 실시간 조회도 일괄 결과에 보존한다.
+      // 담당자가 목적·지원 필요를 바꾼 별도 조회를 전체 목적의 결과로 재사용하지 않는다.
+      if (input.target.purpose === connectedAnalysisEntry.request.target.purpose
+          && JSON.stringify(input.confirmed_support_needs) === JSON.stringify(connectedAnalysisEntry.request.confirmed_support_needs)) {
+        analysisResultKey = `${requestedMode}:${connectedAnalysisEntry.analysis_id}`;
+      }
     }
     const response = await fetch('/api/welfare/recommendations', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -266,6 +273,14 @@ async function queryResources() {
     $('#load-risk-example').disabled = false;
     $('#clear-risk-input').disabled = false;
     renderResults();
+    if (analysisResultKey) {
+      analysisResults.set(analysisResultKey, {recommendation, responseRouting, planningContext, errorMessage, filters: {...filters}});
+      renderAnalysisInputs();
+      if (!analysisBatchRunning && analysisInputs) {
+        const done = analysisInputs.entries.filter((entry) => analysisResults.get(`${requestedMode}:${entry.analysis_id}`)?.recommendation).length;
+        $('#analysis-input-status').textContent = `${analysisInputs.entries.length}집단 중 ${done}집단 추천 완료 · 단건 결과도 목록에서 다시 볼 수 있습니다. 같은 방식의 일괄 실행은 성공 집단을 건너뜁니다.`;
+      }
+    }
   }
   return Boolean(recommendation);
 }
@@ -334,7 +349,6 @@ async function runAnalysisRecommendations() {
       useAnalysisEntry(entry);
       $('#search-mode').value = mode;
       const success = await queryResources();
-      analysisResults.set(key, {recommendation, responseRouting, planningContext, errorMessage, filters: {...filters}});
       renderAnalysisInputs();
       if (!success) { analysisStopRequested = true; break; } // 오류·한도 초과 시 자동 재시도하지 않는다.
     }
