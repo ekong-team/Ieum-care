@@ -50,6 +50,96 @@ def prepare_case(inputs, case_id):
                 first_rank=entry['rank'], focus=focus, request=request)
 
 
+def prepare_analysis_case(inputs, analysis_id):
+    """최신 완료 집단을 ID로 선택한다. 집단 이름이나 위험 단계를 고정하지 않는다."""
+    matches = [entry for entry in inputs['entries'] if entry['analysis_id'] == analysis_id]
+    if len(matches) != 1:
+        raise ValueError('최신 완료 판정 목록에 해당 분석 ID가 정확히 한 건 있어야 합니다.')
+    entry = matches[0]
+    request = deepcopy(entry['request'])
+    request['target']['purpose'] = 'all'
+    # 외부 입력 ID를 파일 경로로 직접 사용하지 않는다.
+    case_id = 'AUTO-' + hashlib.sha256(analysis_id.encode()).hexdigest()[:16]
+    return dict(schema_version='welfare-quality-case-0.1', case_id=case_id,
+                batch_id=inputs['batch_id'], period=inputs['period'], analysis_id=analysis_id,
+                first_rank=entry['rank'], focus='최신 분석 결과 기반 품질 검토', request=request)
+
+
+def coverage_values(entry):
+    target = entry['request']['target']
+    risk = entry['request'].get('risk_assessment') or {}
+    return {('region', target['region']), ('age_group', target['age_group']),
+            ('sex', target['sex']), ('risk_level', risk.get('level'))}
+
+
+def prepare_latest_plan(inputs):
+    """공동 1순위 전원 + 아직 없는 조건을 가장 많이 보충하는 집단을 선택한다.
+
+    전체 성능을 추정하는 통계 표본이 아니라 조건 누락을 줄이는 점검 목록이다.
+    """
+    entries = sorted(inputs['entries'], key=lambda entry: (entry['rank'], entry['analysis_id']))
+    ids = [entry['analysis_id'] for entry in entries]
+    if len(set(ids)) != len(ids):
+        raise ValueError('분석 ID가 중복되어 검증 대상을 선택할 수 없습니다.')
+    selected, covered = [], set()
+    remaining = []
+    for entry in entries:
+        if entry['rank'] == 1:
+            selected.append((entry, ['joint_first_priority']))
+            covered |= coverage_values(entry)
+        else:
+            remaining.append(entry)
+    while remaining:
+        # 동점은 원래 순위, 분석 ID 순서로 결정하여 실행마다 표본이 바뀌지 않게 한다.
+        entry = max(remaining, key=lambda item: len(coverage_values(item) - covered))
+        added = coverage_values(entry) - covered
+        if not added:
+            break
+        selected.append((entry, [f'coverage:{key}={value}' for key, value in sorted(added)]))
+        covered |= added
+        remaining.remove(entry)
+    rows = []
+    for entry, reasons in selected:
+        snapshot = prepare_analysis_case(inputs, entry['analysis_id'])
+        rows.append(dict(analysis_id=entry['analysis_id'], case_id=snapshot['case_id'],
+                         first_rank=entry['rank'], target=deepcopy(snapshot['request']['target']),
+                         risk_level=(snapshot['request'].get('risk_assessment') or {}).get('level'),
+                         reasons=reasons))
+    priority = inputs.get('priority', {})
+    return dict(schema_version='welfare-quality-plan-0.1', batch_id=inputs['batch_id'],
+                period=inputs['period'], policy='all-rank-1-then-greedy-condition-coverage-v1',
+                eligible_count=len(entries), selected=rows,
+                not_selected=[dict(analysis_id=entry['analysis_id'], first_rank=entry['rank'],
+                                   reason='선택된 사례에 지역·연령·성별·단계 조건이 이미 포함됨')
+                              for entry in remaining],
+                partial_count=len(priority.get('partial_assessments', [])),
+                held_count=len(priority.get('held_cohorts', [])),
+                notes=['부분판정·보류는 추천 검증 대상에 넣지 않음',
+                       '관측된 조건만 점검하며 전체 조합·통계적 대표성을 보장하지 않음',
+                       '계획 생성은 외부 API를 호출하지 않음. 실제 추천은 ID별 명시 실행'])
+
+
+def save_latest_plan(inputs, output_root):
+    plan = prepare_latest_plan(inputs)
+    folder = Path(output_root) / 'plans' / inputs['batch_id']
+    folder.mkdir(parents=True, exist_ok=True)
+    write_json(folder / 'plan.json', plan)
+    # JSON을 열지 않아도 팀원이 선정 집단과 이유를 표로 확인할 수 있게 한다.
+    with (folder / 'plan.csv').open('w', encoding='utf-8-sig', newline='') as stream:
+        writer = csv.DictWriter(stream, fieldnames=[
+            'analysis_id', 'region', 'age_group', 'sex', 'risk_level', 'first_rank', 'reasons'])
+        writer.writeheader()
+        for row in plan['selected']:
+            reasons = ['공동 1순위 전체 포함' if reason == 'joint_first_priority' else reason
+                       for reason in row['reasons']]
+            writer.writerow(dict(analysis_id=row['analysis_id'],
+                **{key: row['target'][key] for key in ('region', 'age_group', 'sex')},
+                risk_level=row['risk_level'], first_rank=row['first_rank'], reasons=' / '.join(reasons)))
+    for row in plan['selected']:
+        run_case(prepare_analysis_case(inputs, row['analysis_id']), output_root)
+    return folder, plan
+
+
 def write_review(folder, snapshot, result=None):
     candidates = (result or {}).get('resources', [])
     fields = ['case_id', 'resource_id', 'resource_name', 'criterion', 'check',
@@ -116,12 +206,26 @@ def run_case(snapshot, output_root, *, allow_external=False, attempt=1, agent=No
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--case', choices=CASES, default='CC30F')
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument('--case', choices=CASES, help='고정 사례를 회귀 비교용으로 준비·실행')
+    selection.add_argument('--analysis-id', help='최신 완료 판정의 한 집단만 준비·실행')
+    selection.add_argument('--latest-plan', action='store_true', help='최신 분석 기반 검증 계획 준비 (기본값)')
     parser.add_argument('--allow-external', action='store_true', help='선택한 한 사례의 실제 추천을 실행')
     parser.add_argument('--attempt', type=int, default=1, help='같은 시도는 재호출하지 않음. 새 번호는 명시적인 별도 실행')
     args = parser.parse_args()
+    if args.allow_external and not (args.case or args.analysis_id):
+        parser.error('외부 추천은 --case 또는 --analysis-id로 한 집단을 지정해야 합니다.')
     inputs = latest_analysis_inputs(ROOT / 'data/processed/analysis_current')
-    folder, manifest = run_case(prepare_case(inputs, args.case), ROOT / 'data/processed/welfare_quality',
+    output_root = ROOT / 'data/processed/welfare_quality'
+    if not (args.case or args.analysis_id):
+        folder, plan = save_latest_plan(inputs, output_root)
+        print(json.dumps(dict(folder=str(folder), batch_id=plan['batch_id'],
+                              eligible=plan['eligible_count'], selected=plan['selected'],
+                              external_calls={}), ensure_ascii=False))
+        return
+    snapshot = (prepare_case(inputs, args.case) if args.case else
+                prepare_analysis_case(inputs, args.analysis_id))
+    folder, manifest = run_case(snapshot, output_root,
                                allow_external=args.allow_external, attempt=args.attempt)
     print(json.dumps(dict(folder=str(folder), status=manifest['status'], candidates=manifest['candidate_count'],
                           external_calls=manifest['external_calls']), ensure_ascii=False))
