@@ -6,6 +6,7 @@
 - offline이면 빈 목록이다. 가짜 URL이 실제 기획에 섞이지 않게 한다.
 """
 
+import re
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
@@ -33,9 +34,13 @@ CAUSE_EN = {
     "C5_weekend_gap": "weekend activity",
 }
 SUMMARY_CHARS = 500  # 외부 문서라 지시문이 섞일 수 있다. 짧게 자르고, 기획 프롬프트가 '자료일 뿐'이라고 못 박는다
+TOC_DOTS = re.compile(r"(?:[·.…]\s*){4,}")  # PDF 목차의 점선 '· · · ·'은 요약에서 지운다
 
-PUBLIC = (".go.kr", ".gov", ".gov.uk", ".gov.au", ".gc.ca", "who.int", "oecd.org", "un.org")
-RESEARCH = (".ac.kr", ".re.kr", ".edu", ".ac.uk", "riss.kr", "dbpia.co.kr", "scholar.google.com")
+# 2026-10-23 실제 검색에서 정부 정책포털(korea.kr)·학술지(tandfonline 등)가 other로 분류되어 추가했다.
+PUBLIC = (".go.kr", "korea.kr", ".gov", ".gov.uk", ".gov.au", ".gc.ca", "who.int", "oecd.org", "un.org")
+RESEARCH = (".ac.kr", ".re.kr", ".edu", ".ac.uk", "riss.kr", "dbpia.co.kr", "kci.go.kr", "scholar.google.com",
+            "doi.org", "tandfonline.com", "sciencedirect.com", "springer.com", "wiley.com", "sagepub.com",
+            "nature.com", "bmj.com", "jmir.org", "frontiersin.org", "mdpi.com", "intechopen.com")
 MEDIA = ("yna.co.kr", "hani.co.kr", "chosun.com", "joongang.co.kr", "donga.com", "khan.co.kr", "kbs.co.kr",
          "mbc.co.kr", "sbs.co.kr", "ytn.co.kr", "newsis.com", "news1.kr", "bbc.com", "bbc.co.uk",
          "nytimes.com", "theguardian.com", "reuters.com", "apnews.com")
@@ -74,10 +79,10 @@ def grade(url: str) -> Literal["public", "research", "media", "other"]:
 
     def under(domains):
         return any(host == d.lstrip(".") or host.endswith(d if d.startswith(".") else "." + d) for d in domains)
+    if under(RESEARCH):  # kci.go.kr처럼 공공 도메인 안의 학술 DB가 있어 연구를 먼저 본다
+        return "research"
     if under(PUBLIC):
         return "public"
-    if under(RESEARCH):
-        return "research"
     if under(MEDIA) or host.startswith("news."):
         return "media"
     return "other"
@@ -97,7 +102,7 @@ def to_references(response: dict, limit: int) -> list[TrendReference]:
         published = str(item.get("published_date") or "")
         year = int(published[:4]) if published[:4].isdigit() and 2000 <= int(published[:4]) <= 2100 else None
         references.append(TrendReference(title=(str(item.get("title") or url))[:200], url=url, year=year,
-                                         grade=grade(url), summary=" ".join(content.split())[:SUMMARY_CHARS]))
+                                         grade=grade(url), summary=" ".join(TOC_DOTS.sub(" ", content).split())[:SUMMARY_CHARS]))
         if len(references) >= limit:
             break
     return references

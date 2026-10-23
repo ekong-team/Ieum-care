@@ -74,7 +74,11 @@ class ParsingTests(unittest.TestCase):
         cases = {"https://www.seoul.go.kr/a": "public", "https://www.cdc.gov/a": "public",
                  "https://www.kihasa.re.kr/a": "research", "https://www.snu.ac.kr/a": "research",
                  "https://www.yna.co.kr/a": "media", "https://news.example.com/a": "media",
-                 "https://blog.example.com/a": "other", "https://evilgo.kr/a": "other"}
+                 "https://blog.example.com/a": "other", "https://evilgo.kr/a": "other",
+                 # 2026-10-23 실제 검색 결과에서 잘못 분류됐던 출처
+                 "https://www.korea.kr/common/download.do": "public",
+                 "https://www.tandfonline.com/doi/full/10.1080/x": "research",
+                 "https://www.kci.go.kr/kciportal/a": "research"}
         for url, expected in cases.items():
             self.assertEqual(trends.grade(url), expected, url)
 
@@ -93,6 +97,10 @@ class ParsingTests(unittest.TestCase):
         first, second = trends.to_references(response, limit=5)
         self.assertEqual((first.year, second.year), (2026, None))  # 본문의 연도는 추측하지 않는다
         self.assertLessEqual(len(first.summary), trends.SUMMARY_CHARS)
+
+    def test_pdf_table_of_contents_dots_removed(self):
+        response = {"results": [result("https://a.go.kr/toc", content="목차 · · · · · · · 74 Ⅳ. 지자체 평가 ..........  80")]}
+        self.assertEqual(trends.to_references(response, limit=1)[0].summary, "목차 74 Ⅳ. 지자체 평가 80")
 
     def test_limit_per_stage(self):
         response = {"results": [result(f"https://a.go.kr/{i}") for i in range(8)]}
