@@ -66,3 +66,16 @@ test("본문 실패 유형과 검색 근거 보존·AI 설명 재검토를 구�
   expect(screen.getByText(/검색 발췌는 별도로 남아 있습니다/)).toBeTruthy();
   expect(screen.getByText(/이 보류 설명은 재검토가 필요합니다/)).toBeTruthy();
 });
+
+test("신청 마감 근거와 서버 제외를 지급 기간과 별도로 보여준다", async () => {
+  const input = structuredClone(result);
+  input.diagnostics.sources[0].application_period = {
+    status: "deadline_passed", deadline: "2026-05-29", evidence: "신청기간: 2026.3.30.~2026.5.29.",
+  };
+  input.diagnostics.sources[0].server_exclusions = [{ name: "검토 자원", reason: "application_deadline_passed" }];
+  render(<SearchDiagnostics result={input} />);
+  await userEvent.click(screen.getByText(/검색 출처·추천 보류 이유 확인/));
+  expect(screen.getByText(/신청·접수 기간: 명시 마감일 경과 \(2026-05-29\)/)).toBeTruthy();
+  expect(screen.getByText("신청기간: 2026.3.30.~2026.5.29.")).toBeTruthy();
+  expect(screen.getByText(/서버 제외: 검토 자원 · 명시된 신청 마감일 경과/)).toBeTruthy();
+});

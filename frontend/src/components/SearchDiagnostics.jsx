@@ -24,6 +24,7 @@ const documentFailures = {
   page_read_failed: "분류되지 않은 본문 읽기 오류",
 };
 const exclusions = { source_not_grounded: "검색 출처 미일치", source_not_detail: "상세 안내 부족", quote_not_grounded: "원문 인용 불일치", numeric_claim_not_grounded: "수치 근거 불일치", region_mismatch: "지역 불일치", age_mismatch: "연령 불일치", purpose_mismatch: "지원 목적 불일치", closed: "종료 확인", duplicate: "중복" };
+exclusions.application_deadline_passed = "명시된 신청 마감일 경과";
 
 function officialLink(url) {
   try {
@@ -41,6 +42,7 @@ export default function SearchDiagnostics({ result }) {
     analysis_id: result.risk_assessment?.assessment_id || null,
     period: result.risk_assessment?.period || null,
     model: result.model, searched_at: result.searched_at,
+    decision_date: result.decision_date,
     rules_version: result.review?.rules_version,
     search_stages: result.search_stages || [], diagnostics: data,
     resources: result.resources || [],
@@ -63,6 +65,8 @@ export default function SearchDiagnostics({ result }) {
       {source.document && <p className="muted">공식 본문: {({ html_excerpt: "HTML 본문 일부 읽음", unavailable: "읽기 실패 · 검색 발췌만 사용", not_fetched: "미수집 · 검색 발췌만 사용" })[source.document.status] || "상태 확인 필요"}{source.document.fetched_at ? ` · 수집일 ${source.document.fetched_at}` : ""}{source.document.truncated ? " · 길이 제한으로 일부만 제공" : ""}</p>}
       {!!source.document?.redirects?.length && <p className="muted">같은 공식 안내의 정규 주소로 {source.document.redirects.length}회 이동 · 이동 기록은 다운로드에 포함됩니다.</p>}
       {source.document?.status === "unavailable" && <p className="muted">수집 실패 사유: {documentFailures[source.document.reason] || "기록되지 않은 오류"}{source.document.http_status ? ` (HTTP ${source.document.http_status})` : ""}. 검색 발췌는 별도로 남아 있습니다.</p>}
+      {source.application_period && <p className="muted">신청·접수 기간: {source.application_period.status === "deadline_passed" ? "명시 마감일 경과" : source.application_period.status === "deadline_not_passed" ? "명시 마감일 미경과 · 현재 접수는 별도 확인" : "명확한 신청 날짜 확인 필요"}{source.application_period.deadline ? ` (${source.application_period.deadline})` : ""}</p>}
+      {source.application_period?.evidence && <blockquote className="source-evidence">{source.application_period.evidence}</blockquote>}
       <p><strong>{statuses[source.model_review?.status] || "AI 설명 기록 없음"}</strong></p>
       {source.model_review?.reason && <p>{source.model_review.reason}</p>}
       {source.model_review?.warning === "fetch_failure_is_not_evidence_absence" && <p className="input-basis">이 보류 설명은 재검토가 필요합니다. 본문 수집 실패만으로 남아 있는 검색 근거까지 없다고 판단할 수 없습니다.</p>}

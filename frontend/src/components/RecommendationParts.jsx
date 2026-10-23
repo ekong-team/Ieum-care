@@ -377,6 +377,7 @@ export function Review({ result }) {
     numeric_claim_not_grounded: "금액·조건 수치의 원문 근거 미일치",
     region_mismatch: "지역 불일치",
     closed: "종료 확인",
+    application_deadline_passed: "명시된 신청 마감일 경과",
     purpose_mismatch: "지원 목적 불일치",
     age_mismatch: "연령 불일치",
     duplicate: "중복",
@@ -539,7 +540,8 @@ export function ResourceDialog({ item, close }) {
         {[
           ["지원 내용", item.description],
           ["대상·신청 조건", item.eligibility],
-          ["운영 기간", item.schedule],
+          ["신청·접수 기간", item.application_period?.evidence || "명확한 신청 기간 확인 필요"],
+          ["운영·지급 등 기간 안내", item.schedule],
           ["확인할 사항", item.check],
           ["신청 방법", item.application_method],
         ].map(([label, text]) => (
