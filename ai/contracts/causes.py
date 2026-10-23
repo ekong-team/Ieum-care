@@ -22,7 +22,8 @@ CauseCode = Literal[
 CAUSE_LABELS = {
     "C0_unknown": "원인 미확정",
     "C1_mobility": "외출·이동 위축",
-    "C2_social_consumption": "관계형 활동 감소",
+    # 분석 Agent는 전체 카드 소비 감소로 이 코드를 낸다. 관계 활동 감소로 단정하지 않도록 이름을 맞춘다 (2026-10-23).
+    "C2_social_consumption": "지역 소비 활동 위축",
     "C3_overall_withdrawal": "생활 전반 위축",
     "C4_prolonged": "위축 장기화",
     "C5_weekend_gap": "주말 공백",
