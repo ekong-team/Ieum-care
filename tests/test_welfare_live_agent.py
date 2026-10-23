@@ -4,11 +4,12 @@ import copy
 import io
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch, Mock
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
-from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, search_resources, config_status, SEARCH_CACHE, SEARCH_CACHE_LIMIT
+from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, search_resources, config_status, recency_hint, SEARCH_CACHE, SEARCH_CACHE_LIMIT
 
 URL = 'https://www.chuncheon.go.kr/service-test'
 FIXTURE_FACTS = '가상 검색 결과. 정확한 조건 확인 필요.'
@@ -144,6 +145,61 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual([s['stage'] for s in stages], ['local', 'national'])
         self.assertEqual(sum(s['credits'] for s in stages), 2)
         self.assertEqual(evidence[0]['url'], 'https://www.bokjiro.go.kr/service')
+
+    def test_queries_use_current_year_and_do_not_require_literal_thirties(self):
+        target = dict(region='춘천시', age_group=30, purpose='all')
+        search = Mock(side_effect=[{'results': []}, {'results': [dict(url='https://www.mohw.go.kr/service', content='지원 안내')]}])
+        with patch('ai.welfare_agent.live_agent.datetime') as clock:
+            clock.now.return_value = datetime(2026, 10, 23, tzinfo=timezone.utc)
+            _, stages, _ = search_resources(target, self.config, search)
+        self.assertEqual(len(stages), 2)
+        for call in search.call_args_list:
+            query = call.args[0]['query']
+            self.assertIn('2026', query)
+            self.assertIn('성인', query)
+            self.assertIn('신청방법', query)
+            self.assertNotIn('30대', query)
+            self.assertNotIn('female', query)
+
+    def test_older_detailed_pages_do_not_stop_expansion_and_current_page_ranks_first(self):
+        old = '2023년 노인 지원대상과 신청방법 안내'
+        search = Mock(side_effect=[{'results': [dict(url=URL, content=old), dict(url=URL+'-2', content=old)]},
+                                  {'results': [dict(url='https://www.mohw.go.kr/new', content='2026년 주민 지원대상과 신청방법 안내')]}])
+        with patch('ai.welfare_agent.live_agent.datetime') as clock:
+            clock.now.return_value = datetime(2026, 10, 23, tzinfo=timezone.utc)
+            evidence, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(stages[0]['older_year_source_count'], 2)
+        self.assertEqual(stages[0]['detail_hint_count'], 0)
+        self.assertEqual(evidence[0]['url'], 'https://www.mohw.go.kr/new')
+        self.assertTrue(evidence[0]['detail_hint'])
+        self.assertEqual(recency_hint('연도 없음', 2026), 'unspecified')
+        self.assertEqual(recency_hint('2027년 예정', 2026), 'future_years_only')
+        self.assertEqual(recency_hint('2025년 안내 / Copyright 2026', 2026), 'current_year_mentioned')
+
+    def test_performance_press_release_is_background_and_cannot_be_a_resource_source(self):
+        search = {'results': [dict(url=URL, title='복지멤버십 운영성과 발표', content='노인 지원대상과 신청방법 ' + FIXTURE_FACTS)]}
+        self.assertEqual(search_evidence(search)[0]['source_kind'], 'background_news')
+        result, _ = self.run_agent(search=search)
+        self.assertEqual(result['exclusion_counts'], {'source_not_detail': 1})
+
+    def test_malformed_html_urls_are_rejected_without_guessing_repaired_url(self):
+        bad = 'https://www.bokjiro.go.kr/service?id=1%22%3E%3Cbutton+class%3D%22big-button'
+        for url in (bad, bad.replace('%22', '%2522'), URL + '?x=<button>', URL + '\n?x=1'):
+            with self.subTest(url=url):
+                self.assertIsNone(official_url(url))
+        self.assertIsNotNone(official_url(URL + '?id=1&name=%EB%B3%B5%EC%A7%80'))
+        self.assertIsNotNone(official_url('https://www.chuncheon.go.kr/service%20guide.pdf'))
+
+    def test_activity_area_and_conditional_eligibility_are_explained_to_model(self):
+        self.payload['risk_assessment'] = {'schema_version': 'risk-input-0.1', 'assessment_id': 'test', 'region': '춘천시',
+            'age_group': 60, 'period': '2025-12', 'status': 'held', 'level': None, 'signals': [],
+            'limitations': ['활동지역 집계'], 'model_version': 'example', 'is_example': True}
+        result, call = self.run_agent()
+        instructions = call.call_args.args[0]['systemInstruction']['parts'][0]['text']
+        self.assertIn('활동이 관측된 지역이며 거주지가 아니다', instructions)
+        self.assertIn('개인의 소득·가구·거주·진단 정보가 없다는 이유만으로 모든 조건부 검토 후보를 제외하지 마라', instructions)
+        self.assertIn('활동지역을 개인의 거주지로 확정할 수 없으며', result['review']['input_note'])
 
     def test_reference_documents_do_not_prevent_expansion_and_rank_after_pages(self):
         search = Mock(side_effect=[{'results': [{'url': URL, 'content': '일반 웹 안내'},

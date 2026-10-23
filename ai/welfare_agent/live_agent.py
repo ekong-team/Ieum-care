@@ -12,7 +12,7 @@ import socket
 from threading import Lock
 from time import monotonic
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from ai.welfare_agent.recommender import PURPOSES, age_overlap, validate_request
@@ -118,6 +118,11 @@ def output_text(response):
 def official_url(url):
     if not isinstance(url, str):
         return None
+    # 검색 결과에 섞인 HTML 조각은 잘라서 URL을 추정하지 않고 제외한다.
+    decoded = unquote(url)
+    if (re.search(r'\s', url) or re.search(r'[<>"\x00-\x1f]', decoded)
+            or re.search(r'%(?:22|3c|3e)', decoded, re.IGNORECASE)):
+        return None
     try:
         parts = urlsplit(url)
         host = parts.hostname or ""
@@ -179,6 +184,8 @@ def tavily_search(payload, config, *, on_external_call=None):
 def source_kind(url, title=''):
     """대표·목록 화면을 사업 상세 안내와 구분한다. 분류만으로 내용은 보증하지 않는다."""
     path = urlsplit(url).path.lower().rstrip('/')
+    if any(word in title for word in ('운영성과', '운영 성과', '지원실적', '지원 실적', '성과 발표', '건 발굴')):
+        return 'background_news'
     if (path.endswith('.pdf') or any(word in path for word in ('download', 'filedown'))
             or any(word in title for word in ('백서', '연구용역', '결산', '지역사회보장계획', '회의록'))):
         return 'reference_document'
@@ -211,13 +218,16 @@ def search_evidence(response, *, allow_empty=False):
 def search_resources(target, config, search_call):
     """지역 검색을 먼저 하고 웹 페이지가 부족할 때만 중앙 공식 자료를 1회 보완한다."""
     local_domain = "chuncheon.go.kr" if target["region"] == "춘천시" else "gangnam.go.kr"
-    age = {10: "10대 청소년", 20: "20대 청년", 30: "30대", 40: "40대 중장년", 50: "50대 중장년", 60: "60대 이상 어르신"}[target["age_group"]]
+    age = {10: "10대 청소년", 20: "20대 청년", 30: "성인", 40: "중장년", 50: "중장년", 60: "어르신"}[target["age_group"]]
     purpose = {"all": "복지서비스", "connection": "사회참여 모임", "daily": "일상돌봄",
                "wellbeing": "심리상담", "economic": "생활비 지원", "other": "복지 안내"}[target["purpose"]]
-    plan = [("local", f"{target['region']} {age} {purpose} 신청", [local_domain]),
-            ("national", f"{age} {purpose} 대상 신청", ["bokjiro.go.kr", "mohw.go.kr"])]
-    evidence, stages, dates = [], [], {}
     today = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+    year = date.fromisoformat(today).year
+    # 30대라는 표현이 없는 전 연령·성인 사업도 탐색한다. 검색어는 개인 자격 판정이 아니다.
+    national_age = '성인' if target['age_group'] in (30, 40, 50) else age
+    plan = [("local", f"{target['region']} {year} {age} {purpose} 신청방법", [local_domain]),
+            ("national", f"{year} {national_age} {purpose} 지원대상 신청방법", ["bokjiro.go.kr", "mohw.go.kr"])]
+    evidence, stages, dates = [], [], {}
     for stage, query, domains in plan[:SEARCH_MAX_CALLS]:
         payload = {"query": query, "search_depth": "basic", "auto_parameters": False,
                    "topic": "general", "max_results": 8, "include_domains": domains,
@@ -241,23 +251,28 @@ def search_resources(target, config, search_call):
                        "searched_at": response.get("search_date", today), "source_count": len(found)})
         # 웹페이지 수만으로 충분하다고 보지 않는다. 대상·신청 설명과 연령 관련 단서를 함께 본다.
         # 이 단서는 추가 검색 여부에만 쓰며 신청 자격이나 연령 범위를 확정하지 않는다.
-        age_terms = {10: ("아동", "청소년"), 20: ("청년", "20대"), 30: ("청년", "30대"),
+        age_terms = {10: ("아동", "청소년"), 20: ("청년", "20대"), 30: ("성인", "청년", "30대"),
                      40: ("중장년", "40대"), 50: ("중장년", "50대"), 60: ("어르신", "노인", "60세", "65세")}[target["age_group"]]
         detailed = 0
         for item in found:
             text = re.sub(r"\s+", "", item["title"] + " " + item["content"])
-            item["detail_hint"] = (item["source_kind"] == "web_page" and any(word in text for word in age_terms)
-                    and any(word in text for word in ("지원대상", "신청자격", "이용대상", "대상자"))
+            item['recency_hint'] = recency_hint(item['title'] + ' ' + item['content'], year)
+            broad_terms = ('전연령', '연령제한없', '시민', '주민', '국민', '누구나')
+            item["detail_hint"] = (item["source_kind"] == "web_page" and any(word in text for word in (*age_terms, *broad_terms))
+                    and any(word in text for word in ("지원대상", "신청자격", "이용대상", "대상자", "대상:"))
                     and any(word in text for word in ("신청방법", "접수", "문의", "참여방법", "이용방법")))
-            if item["detail_hint"]:
+            if item["detail_hint"] and item['recency_hint'] != 'older_years_only':
                 detailed += 1
         stages[-1]["detail_hint_count"] = detailed
+        stages[-1]['older_year_source_count'] = sum(item['recency_hint'] == 'older_years_only' for item in found)
+        stages[-1]['background_source_count'] = sum(item['source_kind'] == 'background_news' for item in found)
         if stage == "local" and detailed >= LOCAL_PAGE_TARGET:
             break
     if not evidence:
         raise AgentError("지역·중앙 공식 검색에서 근거를 확보하지 못했습니다. 검색은 최대 2회에서 중단했습니다.")
-    kind_order = {"web_page": 0, "directory": 1, "reference_document": 2}
-    evidence.sort(key=lambda item: (not item.get("detail_hint", False), kind_order[item["source_kind"]],
+    kind_order = {"web_page": 0, "directory": 1, "reference_document": 2, 'background_news': 3}
+    recency_order = {'current_year_mentioned': 0, 'unspecified': 1, 'future_years_only': 2, 'older_years_only': 3}
+    evidence.sort(key=lambda item: (kind_order[item["source_kind"]], recency_order[item['recency_hint']], not item.get("detail_hint", False),
                                   not (urlsplit(item["url"]).hostname == local_domain or urlsplit(item["url"]).hostname.endswith("." + local_domain))))
     selected = evidence[:8]
     # 중앙 보완 검색을 실제 수행했다면 그 웹 안내가 지역 결과 8개에 밀리지 않게 한다.
@@ -271,6 +286,16 @@ def search_resources(target, config, search_call):
             replaceable = [index for index, current in enumerate(selected) if current not in national_pages[:2]]
             selected[replaceable[-1]] = item
     return selected, stages, dates
+
+
+def recency_hint(text, year):
+    """발췌문 연도 단서만 분류한다. 게시 연도·적용 연도나 현행성을 확정하지 않는다."""
+    years = [int(value) for value in re.findall(r'(?<!\d)(20\d{2})(?!\d)', text)]
+    if year in years:
+        return 'current_year_mentioned'
+    if not years:
+        return 'unspecified'
+    return 'older_years_only' if max(years) < year else 'future_years_only'
 
 
 def gemini_schema(schema):
@@ -326,6 +351,12 @@ age_group=10은 10~19세이며 10세 미만 아동은 포함하지 않는다.
 성별만으로 욕구·질환·경제 상태를 추정하지 마라. 성별 제한 자격은 공식 근거에 따라 확인하며 미확인 조건은 확인 사항에 남겨라.
 중앙 자료는 해당 지역의 시행·모집을 보증하지 않는다. 지역 제공 여부가 미확인이면 이를 명시하라.
 source_kind와 detail_hint는 자료 형식·검색 발췌문의 단서이며 내용 정확도·최신성·적합성 점수가 아니다.
+recency_hint는 발췌문에 보이는 연도 단서일 뿐 적용 기준이나 현재 모집을 보장하지 않는다.
+분석의 지역은 활동이 관측된 지역이며 거주지가 아니다. 지역 집단을 '거주자', '거주하는', '거주 집단'으로
+단정하지 말고 '해당 지역에서 활동이 관측된 집단'으로 설명하라. 서비스의 거주 요건은 별도로 확인하라.
+개인의 소득·가구·거주·진단 정보가 없다는 이유만으로 모든 조건부 검토 후보를 제외하지 마라.
+사업 내용과 대상 조건의 원문이 있으면 추가 자격·지역 시행을 확인해야 할 후보로 제시할 수 있다.
+특정 조건을 충족한다고 추정하거나 확인된 신청 자격처럼 표현하지 마라.
 추천 이유에는 입력의 어떤 근거와 연결되는지, 아직 무엇을 모르는지 설명하라. 확인된 필요는 중요한 참고 정보이며
 확인되지 않은 필요도 검토 가설로 설명할 수 있지만 개인의 상태나 신청 자격으로 확정하지 마라.
 보류·불완전 판정의 제한을 보존하고 완료된 위험 판정처럼 해석하지 마라. 소비·이동 감소만으로 질환·빈곤·고립을 단정하지 마라.
@@ -340,7 +371,7 @@ indirect=생활·경제 기반 지원으로 고립 예방을 간접적으로 도
 relevance_reason에 해당 판단을 뒷받침하는 지원 내용과 한계를 설명하라. 직접 연관도 고립 예방 효과가 입증됐다는 뜻은 아니다.
 가능하면 직접 연관된 후보를 먼저 검토하되 검색 근거가 없으면 만들어 채우지 마라.
 검색 근거에 실제로 있는 서비스만 선택하고 source_url은 제공된 검색 출처 URL 중에서 정확히 선택하라.
-대표 화면·목록·보고서는 배경 참고용이다. source_kind=web_page인 사업 안내만 후보의 출처로 선택하라.
+대표 화면·목록·보고서·성과 보도자료는 배경 참고용이다. source_kind=web_page인 사업 안내만 후보의 출처로 선택하라.
 description_evidence에는 지원 내용, eligibility_evidence에는 지원 대상·추가 조건을 설명하는
 같은 source_url의 원문 구절을 각각 1200자 이내로 복사하라. 인용문을 만들거나 다른 사업의 조건을 섞지 마라.
 지원 대상의 소득·가구 구성·거주·나이·제외 조건을 생략하지 말고 발췌문에서 확인 가능한 조건을 모두 포함하라.
@@ -551,7 +582,7 @@ def checked_result(decision, payload, sources, today, model, evidence):
             "has_example_context": bool(risk and risk["is_example"]), "purposes": PURPOSES,
             "review": {"rules_version": "llm-grounding-0.5", "status": status,
                        "input_note": ("위험도 분석 결과가 연결되지 않아 지역·연령·지원 목적과 선택한 추가 정보를 기준으로 추천했습니다."
-                                      if not risk else "전달받은 위험도 결과를 참고했습니다. 집단의 위험 신호가 개인의 지원 필요나 신청 자격을 뜻하지는 않습니다."),
+                                      if not risk else "전달받은 위험도 결과를 참고했습니다. 활동지역을 개인의 거주지로 확정할 수 없으며, 집단의 위험 신호가 개인의 지원 필요나 신청 자격을 뜻하지는 않습니다."),
                        "summary": reader_text(decision["summary"]) if not excluded else "일부 후보가 출처·원문 근거·수치·지역·연령·종료 검증에서 제외되었습니다. 원래 AI 요약은 표시하지 않으며 남은 후보의 근거를 검토해주세요.",
                        "confirmed_support_needs": payload.get("confirmed_support_needs", []), "suggested_purposes": [],
                        "questions": [reader_text(question) for question in decision["questions"]] if not excluded else ["남은 후보의 출처 내용·현재 운영 여부·개인 자격을 확인해주세요."]},
