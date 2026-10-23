@@ -1,7 +1,65 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { api, targetLabel, downloadJSON } from "../domain.js";
 import { formatEvidence } from "../dashboard.js";
+import {
+  buildAnalysisReport,
+  downloadAnalysisReport,
+} from "../analysisReport.js";
 import "./Analysis.css";
+
+function ReportDialog({ html, filename, onClose }) {
+  const dialog = useRef(null);
+  const frame = useRef(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!dialog.current.open) dialog.current.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="analysis-report-dialog"
+      onClose={onClose}
+      aria-labelledby="analysis-report-title"
+    >
+      <div className="analysis-report-toolbar">
+        <div>
+          <h2 id="analysis-report-title">선택 집단 분석 보고서</h2>
+          <p>
+            읽기 쉬운 보고서입니다. 인쇄 창에서 ‘PDF로 저장’을 선택할 수
+            있습니다.
+          </p>
+        </div>
+        <div className="analysis-actions">
+          <button
+            disabled={!ready}
+            onClick={() => {
+              frame.current.contentWindow.focus();
+              frame.current.contentWindow.print();
+            }}
+          >
+            인쇄 / PDF 저장
+          </button>
+          <button
+            className="secondary"
+            onClick={() => downloadAnalysisReport(html, filename)}
+          >
+            보고서 내려받기 (HTML)
+          </button>
+          <button className="secondary" onClick={() => dialog.current.close()}>
+            닫기
+          </button>
+        </div>
+      </div>
+      <iframe
+        ref={frame}
+        title="분석 보고서 미리보기"
+        srcDoc={html}
+        sandbox="allow-same-origin allow-modals"
+        onLoad={() => setReady(true)}
+      />
+    </dialog>
+  );
+}
 
 const reviewLabels = {
   not_run: "외부 검토 미실행",
@@ -36,6 +94,7 @@ export default function Analysis({ active, model, openRecommendations }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [consent, setConsent] = useState(false);
+  const [report, setReport] = useState(null);
   const busy = starting || job?.status === "running";
   const blocked = busy || model.busy || model.running;
   async function load() {
@@ -111,6 +170,7 @@ export default function Analysis({ active, model, openRecommendations }) {
   const configurationReady =
     data?.configuration.gemini_configured &&
     data?.configuration.tavily_configured;
+  const reportHTML = () => buildAnalysisReport(data, cohort, receipt);
   async function start(mode) {
     if (blocked) return;
     setStarting(true);
@@ -609,6 +669,35 @@ export default function Analysis({ active, model, openRecommendations }) {
                   </button>
                   <button
                     className="secondary"
+                    onClick={() => setReport(reportHTML())}
+                  >
+                    분석 보고서 보기
+                  </button>
+                  <button
+                    className="secondary"
+                    onClick={() =>
+                      downloadAnalysisReport(
+                        reportHTML(),
+                        `이음케어_분석보고서_${cohort.analysis_id}.html`,
+                      )
+                    }
+                  >
+                    보고서 내려받기 (HTML)
+                  </button>
+                </div>
+                <p className="muted">
+                  보고서에는 수치·단계 판단 기준·원인 가설·공식 출처·검토 한계를
+                  담습니다. 내려받은 HTML 파일은 브라우저에서 열어 읽을 수
+                  있습니다.
+                </p>
+                <details>
+                  <summary>개발·연동용 데이터</summary>
+                  <p className="muted">
+                    다른 프로그램에 분석 결과를 전달할 때 사용하는 JSON
+                    형식입니다.
+                  </p>
+                  <button
+                    className="secondary"
                     onClick={() =>
                       downloadJSON(
                         {
@@ -621,9 +710,9 @@ export default function Analysis({ active, model, openRecommendations }) {
                       )
                     }
                   >
-                    선택 집단 근거 내려받기
+                    분석 결과 내려받기 (JSON)
                   </button>
-                </div>
+                </details>
                 <details>
                   <summary>실행 과정 확인</summary>
                   <ol>
@@ -648,6 +737,13 @@ export default function Analysis({ active, model, openRecommendations }) {
             </>
           )}
         </>
+      )}
+      {report && (
+        <ReportDialog
+          html={report}
+          filename={`이음케어_분석보고서_${cohort.analysis_id}.html`}
+          onClose={() => setReport(null)}
+        />
       )}
     </section>
   );

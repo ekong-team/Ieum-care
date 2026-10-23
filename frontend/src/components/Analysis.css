@@ -164,6 +164,63 @@
   padding-left: 18px;
   margin: 20px 0;
 }
+.analysis-report-dialog {
+  width: min(1100px, 96vw);
+  max-width: 96vw;
+  max-height: 94vh;
+  border: 1px solid #cad9ce;
+  border-radius: 14px;
+  padding: 0;
+  color: #243b30;
+}
+.analysis-report-dialog::backdrop {
+  background: rgb(16 36 26 / 55%);
+}
+.analysis-report-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  height: 94dvh;
+  overflow: hidden;
+}
+.analysis-report-toolbar {
+  padding: 20px;
+  border-bottom: 1px solid #dce5dd;
+  flex-shrink: 0;
+}
+.analysis-report-toolbar h2 {
+  margin: 0;
+}
+.analysis-report-toolbar p {
+  margin: 8px 0 16px;
+  font-size: 13px;
+}
+.analysis-report-dialog iframe {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  background: #f2f5f2;
+}
+.analysis-report-toolbar button {
+  border: 1px solid #28634b;
+  border-radius: 8px;
+  background: #28634b;
+  color: white;
+  padding: 11px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.analysis-report-toolbar button.secondary {
+  background: white;
+  color: #28634b;
+  border-color: #cad9ce;
+}
+.analysis-report-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
 @media (max-width: 760px) {
   .analysis-columns,
   .analysis-evidence {

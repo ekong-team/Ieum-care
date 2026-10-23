@@ -211,3 +211,25 @@ test("원문 확보와 AI 인용 검증 탈락을 구분해 표시한다", async
     screen.getByText(/이번 검색에서 새로 발견한 자료와 구분합니다/),
   ).toBeTruthy();
 });
+
+test("사용자 보고서는 미리보기로 열고 JSON은 개발용 접힌 항목에 둔다", async () => {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+    configurable: true,
+    value: function () {
+      this.setAttribute("open", "");
+    },
+  });
+  render(<Analysis active model={model} openRecommendations={() => {}} />);
+  await screen.findByText("-6.62%");
+  const jsonButton = screen.getByText("분석 결과 내려받기 (JSON)");
+  expect(jsonButton.closest("details").open).toBe(false);
+  await userEvent.click(
+    screen.getByRole("button", { name: "분석 보고서 보기" }),
+  );
+  expect(screen.getByRole("dialog").getAttribute("open")).not.toBe(null);
+  const frame = screen.getByTitle("분석 보고서 미리보기");
+  expect(frame.getAttribute("srcdoc")).toContain("춘천시 · 30대 · 여성");
+  expect(frame.getAttribute("srcdoc")).toContain("-6.62%");
+  expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
+  expect(posts).toHaveLength(0);
+});
