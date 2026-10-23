@@ -249,8 +249,9 @@ class GraphConnectionTests(unittest.TestCase):
 
     def test_dropped_reason_reaches_trace_and_warnings(self):
         offline = lambda fn: lambda ctx, *args: fn(replace(ctx, mode="offline"), *args)  # noqa: E731
+        # 공백 분석을 고정한다. 실제 공백 분석은 저장 자료로 C3=covered를 내므로 DRAFT의 C3 공백 주장이 거부된다.
         engines = replace(Engines(), recommend_existing=offline(Engines().recommend_existing),
-                          search_trends=lambda ctx, planning: [],
+                          search_trends=lambda ctx, planning: [], analyze_gaps=lambda ctx, planning: [GAP],
                           generate_plans=partial(planner.generate_plans,
                                                  call=fake_gemini([{**DRAFT, "trend_references": []}, TOO_LONG])))
         state = run_pipeline(PROFILE, mode="live", engines=engines, run_id=RUN_ID)

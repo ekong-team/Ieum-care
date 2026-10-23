@@ -22,9 +22,11 @@ from ai.contracts import (CAUSE_LABELS, MAX_REVISIONS, CauseHypothesis, Existing
                           GroundingReport, PipelineState, PlanEvaluation, ProgramPlan, TargetProfile, TrendReference)
 from ai.graph.trace import TraceRecorder
 from ai.nodes import causes as cause_rules
+from ai.nodes import gaps
 from ai.nodes import grounding
 from ai.nodes import planner
 from ai.nodes import stubs
+from ai.nodes import trends as trend_sources  # PlanningInput.trends 필드와 이름이 겹치지 않게
 from ai.nodes import welfare
 from ai.nodes.context import NodeContext
 
@@ -48,8 +50,8 @@ class Engines:
 
     analyze_causes: Callable[[NodeContext, TargetProfile], list[CauseHypothesis]] = cause_rules.analyze_causes
     recommend_existing: Callable[[NodeContext, TargetProfile], ExistingResources] = welfare.recommend_existing
-    search_trends: Callable[[NodeContext, PlanningInput], list[TrendReference]] = stubs.search_trends
-    analyze_gaps: Callable[[NodeContext, PlanningInput], list[GapItem]] = stubs.analyze_gaps
+    search_trends: Callable[[NodeContext, PlanningInput], list[TrendReference]] = trend_sources.search_trends
+    analyze_gaps: Callable[[NodeContext, PlanningInput], list[GapItem]] = gaps.analyze_gaps
     # live면 Gemini로 생성하고, offline이면 planner 안에서 가짜 구현으로 넘긴다.
     generate_plans: Callable[[NodeContext, PlanningInput], list[ProgramPlan]] = planner.generate_plans
     # (통과한 기획안, 리포트). 통과한 기획안은 문제 항목만 지운 수정본일 수 있다.
