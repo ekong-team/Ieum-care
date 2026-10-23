@@ -1,4 +1,4 @@
-# Python 3.12; installed environment including optional spatial verification, 2026-10-20
+# Python 3.12; installed environment including optional spatial verification, 2026-10-20; pypdf added 2026-10-23
 aiosqlite==0.22.1
 annotated-types==0.8.0
 anyio==4.15.1
@@ -31,6 +31,7 @@ packaging==26.3
 pandas==3.0.1
 pydantic==2.14.1
 pydantic-core==2.50.1
+pypdf==6.10.0
 pyproj==3.7.2
 pyshp==2.3.1
 python-dateutil==2.9.0.post0

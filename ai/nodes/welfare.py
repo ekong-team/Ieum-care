@@ -20,8 +20,6 @@ def to_welfare_payload(profile: TargetProfile, run_id: str, *, causes: list[Caus
     """대상 프로필을 복지 추천 Agent의 요청 형식으로 바꾼다. (요청, 경고 목록)을 돌려준다."""
     warnings = []
     target = profile.target
-    if target.sex != "all":
-        warnings.append("성별을 추천 요청과 분석 맥락에 보존합니다. 실제 자원 자격 조건은 담당자가 확인하세요.")
     payload = {"target": {"region": target.region, "age_group": target.age_group, "sex": target.sex, "purpose": "all"},
                "confirmed_support_needs": []}
     try:

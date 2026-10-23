@@ -7,7 +7,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import sys
+import socket
 from threading import BoundedSemaphore
+from copy import deepcopy
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -15,8 +17,21 @@ from ai.welfare_agent.recommender import recommend, validate_request  # noqa: E4
 from ai.welfare_agent.live_agent import recommend_live, config_status, AgentError  # noqa: E402
 from ai.contracts import ExistingResources  # noqa: E402
 from ai.nodes.welfare import attach_response_routes, to_existing_resources  # noqa: E402
+from ai.welfare_agent.analysis_input import prepare_analysis_inputs, latest_analysis_inputs  # noqa: E402
+from ai.welfare_agent.planning_handoff import PlanningInbox  # noqa: E402
+from backend.analysis import AnalysisService  # noqa: E402
 
 LIVE_SLOT = BoundedSemaphore(1)
+
+
+class LocalServer(ThreadingHTTPServer):
+    # Windows에서 SO_REUSEADDR로 같은 포트의 서버가 중복 실행되는 것을 막는다.
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if sys.platform == 'win32':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def unavailable_routing():
@@ -25,9 +40,43 @@ def unavailable_routing():
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # Windows의 파일 연결/레지스트리 설정과 무관하게 ES 모듈을 실행 가능한 형식으로 보낸다.
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map,
+                      '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css'}
+
     def do_GET(self):
+        if self.path == '/api/analysis/job':
+            self.send_json(HTTPStatus.OK, self.server.analysis_service.state())
+            return
+        if self.path == '/api/analysis/result':
+            try:
+                self.send_json(HTTPStatus.OK, self.server.analysis_service.result())
+            except FileNotFoundError:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': '완료된 분석 결과가 없습니다. 먼저 입력 데이터를 준비해주세요.'})
+            except (OSError, ValueError, KeyError, TypeError):
+                self.send_json(HTTPStatus.CONFLICT, {'error': '저장된 분석 결과를 검증하지 못했습니다. 마지막 실행 상태를 확인해주세요.'})
+            return
+        if self.path == '/api/planning/requests':
+            try:
+                self.send_json(HTTPStatus.OK, {'schema_version': 'planning-inbox-0.1', 'agent_connected': False,
+                                              'requests': self.server.planning_inbox.list_requests()})
+            except OSError:
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': '기획 전달함을 읽지 못했습니다.'})
+            return
+        if self.path == "/api/welfare/analysis-inputs":
+            try:
+                result = self.server.analysis_inputs or latest_analysis_inputs(ROOT / 'data/processed/analysis_current')
+                self.send_json(HTTPStatus.OK, deepcopy(result))
+            except FileNotFoundError:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "아직 완료된 분석 결과가 없습니다. 분석 실행 후 다시 불러와주세요."})
+            except (ValueError, KeyError, TypeError):
+                self.send_json(HTTPStatus.CONFLICT, {"error": "분석 결과와 1차 순위의 검증에 실패했습니다. 분석을 다시 완료해주세요."})
+            return
         if self.path == "/api/welfare/status":
             self.send_json(HTTPStatus.OK, config_status())
+            return
+        if not (ROOT / 'frontend/dist/index.html').exists():
+            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, 'Build the React frontend first: cd frontend && npm ci && npm run build')
             return
         super().do_GET()
 
@@ -44,6 +93,68 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == '/api/analysis/runs':
+            origin = self.headers.get('Origin')
+            allowed = {f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost')
+                       for port in (self.server.server_port, 5173)}
+            if origin is not None and origin not in allowed:
+                self.send_json(HTTPStatus.FORBIDDEN, {'error': '로컬 서비스 화면에서 실행해주세요.'})
+                return
+            if self.headers.get_content_type() != 'application/json':
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 2048:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {'error': '분석 요청 크기를 확인해주세요.'})
+                    return
+                result = self.server.analysis_service.start(json.loads(self.rfile.read(length)))
+            except BlockingIOError as error:
+                self.send_json(HTTPStatus.CONFLICT, {'error': str(error)})
+                return
+            except (FileNotFoundError, OSError):
+                self.send_json(HTTPStatus.CONFLICT, {'error': '분석 입력과 최신 결과 파일을 확인해주세요.'})
+                return
+            except (ValueError, TypeError, KeyError, UnicodeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': '기준월·집단·외부 전송 확인 또는 API 키 설정을 확인해주세요.'})
+                return
+            self.send_json(HTTPStatus.ACCEPTED, result)
+            return
+        if self.path == '/api/planning/requests':
+            if self.headers.get_content_type() != 'application/json':
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 2 * 1024 * 1024:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {'error': '기획 요청 크기를 확인해주세요.'})
+                    return
+                envelope = self.server.planning_inbox.save(json.loads(self.rfile.read(length)))
+            except (ValueError, TypeError, KeyError, AttributeError, UnicodeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': '기획 요청의 대상·근거·선택 자원·조회 상태가 일치하지 않습니다.'})
+                return
+            except OSError:
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': '기획 요청을 저장하지 못했습니다. 다시 시도해주세요.'})
+                return
+            self.send_json(HTTPStatus.OK, envelope)
+            return
+        if self.path == '/api/welfare/analysis-inputs':
+            # 분석 프로세스가 run_analysis() 반환값을 직접 전달하는 수신점.
+            if self.headers.get_content_type() != 'application/json':
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 16 * 1024 * 1024:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {'error': '분석 결과 크기를 확인해주세요.'})
+                    return
+                prepared = prepare_analysis_inputs(json.loads(self.rfile.read(length)))
+            except (ValueError, KeyError, TypeError, UnicodeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': '분석 결과·해시·집단·1차 순위가 일치하지 않습니다.'})
+                return
+            self.server.analysis_inputs = prepared
+            self.send_json(HTTPStatus.OK, {'batch_id': prepared['batch_id'], 'targets': len(prepared['entries'])})
+            return
         if self.path != "/api/welfare/recommendations":
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "API 경로를 찾을 수 없습니다."})
             return
@@ -93,9 +204,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, result)
 
 
-def create_server(port=5175):
-    # 프로젝트 루트·원본 데이터가 아니라 frontend 폴더만 정적 제공한다.
-    return ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend")))
+def create_server(port=5175, *, planning_root=None):
+    # React 빌드 결과만 제공한다. 소스·설정·원본 데이터는 정적 경로에 포함하지 않는다.
+    server = LocalServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend/dist")))
+    server.analysis_inputs = None
+    server.analysis_service = AnalysisService(ROOT, LIVE_SLOT, lambda: setattr(server, 'analysis_inputs', None))
+    server.planning_inbox = PlanningInbox(planning_root or ROOT / 'data/processed/planning_requests')
+    return server
 
 
 if __name__ == "__main__":
@@ -104,6 +219,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     with create_server(args.port) as server:
         print(f"Ieum care: http://127.0.0.1:{args.port}/#recommendations", flush=True)
+        print(f"React build: {ROOT / 'frontend/dist'}", flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:

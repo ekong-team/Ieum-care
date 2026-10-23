@@ -5,3 +5,4 @@ jsonschema==4.26.0
 pydantic==2.14.1
 numpy==2.3.5
 pandas==3.0.1
+pypdf==6.10.0

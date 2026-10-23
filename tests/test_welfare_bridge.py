@@ -54,14 +54,14 @@ class WelfareBridgeTests(unittest.TestCase):
         self.assertIsNone(payload["risk_assessment"]["level"])
         self.assertEqual(payload["risk_assessment"]["model_version"], "manual-input")
 
-    def test_sex_is_preserved_in_request_and_context(self):
+    def test_sex_is_preserved_in_new_contract(self):
         data = profile_data()
         data["target"]["sex"] = "female"
         payload, warnings = self.convert(data)
         self.assertEqual(payload["target"]["sex"], "female")
         self.assertEqual(payload["risk_assessment"]["sex"], "female")
         self.assertEqual(payload["risk_assessment"]["schema_version"], "risk-input-0.2")
-        self.assertTrue(any("성별" in text for text in warnings))
+        self.assertEqual(warnings, [])
 
     def test_structured_evidence_and_causes_are_preserved_without_conversion(self):
         profile = TargetProfile.model_validate(profile_data())
@@ -92,6 +92,7 @@ class WelfareBridgeTests(unittest.TestCase):
         payload, _ = self.convert(profile_data())
         for changes in ({"period": "2025-11"}, {"risk": None},
                         {"target": {"region": "강남구", "age_group": 20}},
+                        {"target": {"region": "춘천시", "age_group": 20, "sex": "female"}},
                         {"is_example": False}, {"signals": []},
                         {"limitations": []}):
             modified = copy.deepcopy(payload)

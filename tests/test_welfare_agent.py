@@ -5,6 +5,7 @@ from http.client import HTTPConnection
 import json
 from pathlib import Path
 from threading import Thread
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
@@ -283,6 +284,19 @@ class WelfareApiTests(unittest.TestCase):
         self.assertEqual([route["route"] for route in result["response_routing"]["routes"]],
                          ["existing_resource_linkage", "preventive_planning", "further_review"])
 
+    def test_http_v02_preserves_producer_sex_and_assessment(self):
+        from tests.test_welfare_v02 import producer_requests
+        for sex in ('all', 'male', 'female'):
+            for request in producer_requests(sex):
+                status, content = self.request('POST', '/api/welfare/recommendations', json.dumps(request))
+                self.assertEqual(status, 200)
+                result = json.loads(content)
+                self.assertEqual(result['target'], request['target'])
+                self.assertEqual(result['risk_assessment'], request['risk_assessment'])
+        request = list(producer_requests('female'))[-1]
+        request['risk_assessment']['sex'] = 'male'
+        self.assertEqual(self.request('POST', '/api/welfare/recommendations', json.dumps(request))[0], 400)
+
     def test_http_empty_candidates_keep_prevention_separate_from_failure(self):
         payload = {"mode": "live", "target": {"region": "춘천시", "age_group": 60, "purpose": "all"}}
         with patch('backend.server.recommend_live', return_value={"resources": [], "warnings": []}) as live:
@@ -343,12 +357,35 @@ class WelfareApiTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/welfare/recommendations", 'x' * 16385)[0], 413)
 
     def test_static_root_does_not_expose_project_files(self):
-        status, body = self.request("GET", "/")
-        self.assertEqual(status, 200)
-        self.assertIn(b"app.js", body)
-        for path in ("/requirements.txt", "/../requirements.txt", "/ai/welfare_agent/welfare_resources.json"):
-            with self.subTest(path=path):
-                self.assertEqual(self.request("GET", path)[0], 404)
+        # React 빌드 유무·번들 파일명에 의존하지 않고 실제 비공개 파일의 차단을 검사한다.
+        with TemporaryDirectory() as temporary, patch('backend.server.ROOT', Path(temporary)):
+            root = Path(temporary)
+            dist = root / 'frontend/dist'
+            dist.mkdir(parents=True)
+            (dist / 'index.html').write_text('<script src="/assets/test.js"></script>', encoding='utf-8')
+            (root / 'requirements.txt').write_text('private', encoding='utf-8')
+            private = root / 'ai/welfare_agent/welfare_resources.json'
+            private.parent.mkdir(parents=True)
+            private.write_text('{}', encoding='utf-8')
+            server = create_server(0)
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for path, expected in (('/', 200), ('/requirements.txt', 404),
+                        ('/../requirements.txt', 404), ('/ai/welfare_agent/welfare_resources.json', 404)):
+                    with self.subTest(path=path):
+                        connection = HTTPConnection('127.0.0.1', server.server_port, timeout=3)
+                        try:
+                            connection.request('GET', path)
+                            response = connection.getresponse()
+                            self.assertEqual(response.status, expected)
+                            response.read()
+                        finally:
+                            connection.close()
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
 
 if __name__ == "__main__":
