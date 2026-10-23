@@ -73,7 +73,8 @@ class WelfareV02Tests(unittest.TestCase):
         search = Mock(return_value={'results': [{'url': URL, 'title': '공식 안내', 'content': '대상 및 신청 안내'}]})
         call = Mock(return_value={'candidates': [message(json.dumps({'summary': '근거 확인 필요', 'questions': [], 'resources': []}))]})
         with patch('ai.welfare_agent.live_agent.configuration', return_value=config):
-            result = recommend_live(request, call=call, search_call=search)
+            result = recommend_live(request, call=call, search_call=search,
+                                    document_getter=Mock(side_effect=ValueError('offline fixture')))
         context = json.loads(call.call_args.args[0]['contents'][0]['parts'][0]['text'])['context']
         self.assertEqual(context['target']['sex'], 'female')
         self.assertEqual(context['risk_assessment'], request['risk_assessment'])

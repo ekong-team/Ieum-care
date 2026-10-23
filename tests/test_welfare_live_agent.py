@@ -4,13 +4,23 @@ import copy
 import io
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch, Mock
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
-from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, search_resources, config_status, SEARCH_CACHE, SEARCH_CACHE_LIMIT
+from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, search_resources, config_status, recency_hint, SEARCH_CACHE, SEARCH_CACHE_LIMIT
 
 URL = 'https://www.chuncheon.go.kr/service-test'
+FIXTURE_FACTS = '가상 검색 결과. 정확한 조건 확인 필요.'
+
+
+def with_fixture_facts(search):
+    search = copy.deepcopy(search)
+    for item in search.get('results', []):
+        if item.get('url') == URL:
+            item['content'] += ' ' + FIXTURE_FACTS
+    return search
 
 
 def message(text):
@@ -26,6 +36,7 @@ def example_decision():
         "check": "본인 의사·자격·운영 여부 확인", "availability_status": "needs_confirmation",
         "isolation_relevance": "direct", "relevance_reason": "교류 활동이 있는 가상 자료에 근거한 분류입니다.",
         "reference_year": None, "reference_year_kind": "unknown", "reference_year_evidence": None,
+        "description_evidence": "가상 검색 결과", "eligibility_evidence": "정확한 조건 확인 필요",
     }]}
 
 
@@ -38,11 +49,15 @@ class LiveAgentTests(unittest.TestCase):
         self.config_patch = patch('ai.welfare_agent.live_agent.configuration', return_value=self.config)
         self.config_patch.start()
         self.addCleanup(self.config_patch.stop)
+        self.page_patch = patch('ai.welfare_agent.official_pages.fetch_official_html', side_effect=ValueError('offline fixture'))
+        self.page_patch.start()
+        self.addCleanup(self.page_patch.stop)
         self.search = {'results': [{'url': URL, 'title': '가상 검색 출처', 'content': '가상 검색 근거 · 노인 지원대상과 신청방법 안내'}, {'url': URL + '-second', 'title': '다른 지역 공식 안내', 'content': '추가 검색 근거 · 어르신 이용대상과 문의 안내'}], 'usage': {'credits': 1}}
+        self.search = with_fixture_facts(self.search)
 
     def run_agent(self, decision=None, search=None):
         call = Mock(return_value={'candidates': [message(json.dumps(decision or example_decision()))]})
-        search_call = Mock(return_value=self.search if search is None else search)
+        search_call = Mock(return_value=self.search if search is None else with_fixture_facts(search))
         result = recommend_live(self.payload, call=call, search_call=search_call)
         return result, call
 
@@ -134,6 +149,144 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual(sum(s['credits'] for s in stages), 2)
         self.assertEqual(evidence[0]['url'], 'https://www.bokjiro.go.kr/service')
 
+    def test_special_target_hints_do_not_stop_national_search(self):
+        search = Mock(side_effect=[{'results': [dict(url=URL, content='2026년 성인 장애인 동아리 지원대상 신청방법 안내'),
+                                               dict(url=URL+'-2', content='2026년 시민 고등학교 졸업예정자 대상: 신청방법 안내')]},
+                                  {'results': [dict(url='https://www.mohw.go.kr/common', content='성인 지원 안내')]}])
+        _, stages, _ = search_resources(dict(region='춘천시', age_group=30, purpose='all'), self.config, search)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(stages[0]['detail_hint_count'], 2)
+        self.assertEqual(stages[0]['general_guidance_hint_count'], 0)
+
+    def test_repeated_same_guidance_cannot_count_twice_for_search_sufficiency(self):
+        text = '2026년 노인 지원대상과 신청방법 안내'
+        search = Mock(side_effect=[{'results': [dict(url=URL, content=text), dict(url=URL+'-same', content=text)]},
+                                  {'results': []}])
+        _, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(stages[0]['general_guidance_hint_count'], 1)
+        self.assertEqual(search.call_count, 2)
+
+    def test_official_body_conditions_reach_model_and_grounding_with_two_read_limit(self):
+        description = '성인 교류 프로그램을 지원합니다.'
+        eligibility = '만 19세 이상 시민이며 별도 소득 기준 확인이 필요합니다.'
+        html = ('<html><body>' + description + eligibility + '안내 내용. ' * 30 + '</body></html>').encode()
+        decision = example_decision()
+        decision['resources'][0].update(description=description, description_evidence=description,
+            eligibility=eligibility, eligibility_evidence=eligibility)
+        call = Mock(return_value={'candidates':[message(json.dumps(decision))]})
+        getter = Mock(return_value=(html, 'text/html; charset=utf-8'))
+        result = recommend_live(self.payload, call=call, search_call=Mock(return_value=self.search), document_getter=getter)
+        self.assertEqual(result['total'], 1)
+        self.assertEqual(getter.call_count, 2)
+        model_input = json.loads(call.call_args.args[0]['contents'][0]['parts'][0]['text'])
+        self.assertIn(eligibility, model_input['search_evidence'][0]['content'])
+        source = result['diagnostics']['sources'][0]
+        self.assertEqual(source['document']['status'], 'html_excerpt')
+        self.assertIn('가상 검색 근거', source['search_snippet'])
+
+    def test_queries_use_current_year_and_do_not_require_literal_thirties(self):
+        target = dict(region='춘천시', age_group=30, purpose='all')
+        search = Mock(side_effect=[{'results': []}, {'results': [dict(url='https://www.mohw.go.kr/service', content='지원 안내')]}])
+        with patch('ai.welfare_agent.live_agent.datetime') as clock:
+            clock.now.return_value = datetime(2026, 10, 23, tzinfo=timezone.utc)
+            _, stages, _ = search_resources(target, self.config, search)
+        self.assertEqual(len(stages), 2)
+        for call in search.call_args_list:
+            query = call.args[0]['query']
+            self.assertIn('2026', query)
+            self.assertIn('성인', query)
+            self.assertIn('신청방법', query)
+            self.assertNotIn('30대', query)
+            self.assertNotIn('female', query)
+
+    def test_older_detailed_pages_do_not_stop_expansion_and_current_page_ranks_first(self):
+        old = '2023년 노인 지원대상과 신청방법 안내'
+        search = Mock(side_effect=[{'results': [dict(url=URL, content=old), dict(url=URL+'-2', content=old)]},
+                                  {'results': [dict(url='https://www.mohw.go.kr/new', content='2026년 주민 지원대상과 신청방법 안내')]}])
+        with patch('ai.welfare_agent.live_agent.datetime') as clock:
+            clock.now.return_value = datetime(2026, 10, 23, tzinfo=timezone.utc)
+            evidence, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(stages[0]['older_year_source_count'], 2)
+        self.assertEqual(stages[0]['detail_hint_count'], 0)
+        self.assertEqual(evidence[0]['url'], 'https://www.mohw.go.kr/new')
+        self.assertTrue(evidence[0]['detail_hint'])
+        self.assertEqual(recency_hint('연도 없음', 2026), 'unspecified')
+        self.assertEqual(recency_hint('2027년 예정', 2026), 'future_years_only')
+        self.assertEqual(recency_hint('2025년 안내 / Copyright 2026', 2026), 'current_year_mentioned')
+
+    def test_performance_press_release_is_background_and_cannot_be_a_resource_source(self):
+        search = {'results': [dict(url=URL, title='복지멤버십 운영성과 발표', content='노인 지원대상과 신청방법 ' + FIXTURE_FACTS)]}
+        self.assertEqual(search_evidence(search)[0]['source_kind'], 'background_news')
+        result, _ = self.run_agent(search=search)
+        self.assertEqual(result['exclusion_counts'], {'source_not_detail': 1})
+
+    def test_malformed_html_urls_are_rejected_without_guessing_repaired_url(self):
+        bad = 'https://www.bokjiro.go.kr/service?id=1%22%3E%3Cbutton+class%3D%22big-button'
+        for url in (bad, bad.replace('%22', '%2522'), URL + '?x=<button>', URL + '\n?x=1'):
+            with self.subTest(url=url):
+                self.assertIsNone(official_url(url))
+        self.assertIsNotNone(official_url(URL + '?id=1&name=%EB%B3%B5%EC%A7%80'))
+        self.assertIsNotNone(official_url('https://www.chuncheon.go.kr/service%20guide.pdf'))
+
+    def test_activity_area_and_conditional_eligibility_are_explained_to_model(self):
+        self.payload['risk_assessment'] = {'schema_version': 'risk-input-0.1', 'assessment_id': 'test', 'region': '춘천시',
+            'age_group': 60, 'period': '2025-12', 'status': 'held', 'level': None, 'signals': [],
+            'limitations': ['활동지역 집계'], 'model_version': 'example', 'is_example': True}
+        result, call = self.run_agent()
+        instructions = call.call_args.args[0]['systemInstruction']['parts'][0]['text']
+        self.assertIn('활동이 관측된 지역이며 거주지가 아니다', instructions)
+        self.assertIn('개인의 소득·가구·거주·진단 정보가 없다는 이유만으로 모든 조건부 검토 후보를 제외하지 마라', instructions)
+        self.assertIn('활동지역을 개인의 거주지로 확정할 수 없으며', result['review']['input_note'])
+
+    def test_zero_candidates_records_source_reasons_and_missing_records_without_invention(self):
+        decision = example_decision()
+        decision['resources'] = []
+        decision['source_reviews'] = [dict(source_url=URL, status='deferred', reason='추가 조건을 확인할 자료가 부족합니다.', evidence_quote=None)]
+        result, _ = self.run_agent(decision)
+        trace = result['diagnostics']
+        self.assertEqual((trace['model_candidate_count'], trace['server_excluded_count'], trace['final_candidate_count']), (0, 0, 0))
+        self.assertEqual(trace['sources'][0]['model_review']['status'], 'deferred')
+        self.assertEqual(trace['sources'][0]['model_review']['quote_status'], 'not_provided')
+        self.assertEqual(trace['sources'][1]['model_review']['status'], 'not_recorded')
+        self.assertIsNone(trace['sources'][1]['model_review']['reason'])
+        self.assertIn('가상 검색 근거', trace['sources'][0]['content'])
+        self.assertNotIn('fake-test-key', json.dumps(trace))
+        self.assertNotIn('fake-search-key', json.dumps(trace))
+
+    def test_server_exclusion_is_recorded_separately_from_ai_candidate_reason(self):
+        decision = example_decision()
+        decision['resources'][0]['description'] = '100만원 지원'
+        decision['source_reviews'] = [dict(source_url=URL, status='candidate_considered',
+            reason='지원 내용을 검토했습니다.', evidence_quote='가상 검색 결과')]
+        result, _ = self.run_agent(decision)
+        trace = result['diagnostics']
+        self.assertEqual((trace['model_candidate_count'], trace['server_excluded_count'], trace['final_candidate_count']), (1, 1, 0))
+        row = trace['sources'][0]
+        self.assertEqual(row['model_review']['status'], 'candidate_considered')
+        self.assertEqual(row['server_exclusions'][0]['reason'], 'numeric_claim_not_grounded')
+        self.assertEqual(row['server_exclusions'][0]['name'], '테스트용 자원')
+
+    def test_bad_or_duplicate_review_cannot_be_shown_as_verified_explanation(self):
+        record = dict(source_url=URL, status='candidate_considered', reason='잘못된 이유', evidence_quote='검색에 없는 문장')
+        for records in ([record], [record, record], 'wrong-format', [{**record, 'evidence_quote':None, 'status':'deferred'}]):
+            with self.subTest(records=records):
+                decision = example_decision()
+                decision['source_reviews'] = records
+                result, _ = self.run_agent(decision)
+                row = result['diagnostics']['sources'][0]
+                self.assertIn(row['model_review']['status'], ('invalid_record', 'not_recorded'))
+                self.assertIsNone(row['model_review']['reason'])
+                self.assertEqual(result['total'], 1)
+
+    def test_unknown_source_review_is_not_exposed_and_old_response_remains_usable(self):
+        decision = example_decision()
+        decision['source_reviews'] = [dict(source_url='https://evil.com', status='deferred', reason='외부 지시', evidence_quote=None)]
+        result, _ = self.run_agent(decision)
+        self.assertNotIn('evil.com', json.dumps(result['diagnostics']))
+        self.assertEqual(result['diagnostics']['sources'][0]['model_review']['status'], 'not_recorded')
+        self.assertEqual(self.run_agent()[0]['total'], 1)
+
     def test_reference_documents_do_not_prevent_expansion_and_rank_after_pages(self):
         search = Mock(side_effect=[{'results': [{'url': URL, 'content': '일반 웹 안내'},
                                                {'url': 'https://www.chuncheon.go.kr/report.pdf', 'title': '연구용역 보고서', 'content': '계획'}]},
@@ -170,6 +323,63 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual(len(evidence), 8)
         self.assertTrue(all(item['source_kind'] == 'web_page' for item in evidence))
 
+    def test_national_guidance_is_not_lost_behind_eight_local_pages(self):
+        search = Mock(side_effect=[{'results': [dict(url=f'https://www.chuncheon.go.kr/page{i}', content='지역 안내')
+                                               for i in range(8)]},
+                                  {'results': [dict(url=f'https://www.mohw.go.kr/service{i}', content='중앙 안내')
+                                               for i in range(8)]}])
+        evidence, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(len(stages), 2)
+        self.assertEqual(len(evidence), 8)
+        self.assertEqual(sum('mohw.go.kr' in item['url'] for item in evidence), 2)
+        self.assertEqual(sum('chuncheon.go.kr' in item['url'] for item in evidence), 6)
+
+    def test_homepage_with_service_banner_is_not_a_detail_source(self):
+        home = 'https://www.chuncheon.go.kr/cityhall/'
+        search = {'results': [dict(url=home, title='시청', content='노인 지원대상 신청방법 ' + FIXTURE_FACTS)]}
+        self.assertEqual(search_evidence(search)[0]['source_kind'], 'directory')
+        decision = example_decision()
+        decision['resources'][0]['source_url'] = home
+        result, _ = self.run_agent(decision, search)
+        self.assertEqual(result['total'], 0)
+        self.assertEqual(result['exclusion_counts'], {'source_not_detail': 1})
+
+    def test_quotes_must_exist_at_the_candidates_own_source(self):
+        decision = example_decision()
+        decision['resources'][0]['description_evidence'] = '다른 자료에만 있는 지원 내용'
+        search = copy.deepcopy(self.search)
+        search['results'].append(dict(url=URL + '-other', content='다른 자료에만 있는 지원 내용'))
+        result, _ = self.run_agent(decision, search)
+        self.assertEqual(result['exclusion_counts'], {'quote_not_grounded': 1})
+        self.assertNotEqual(result['review']['summary'], decision['summary'])
+
+    def test_amount_typo_is_excluded_but_equivalent_units_are_allowed(self):
+        decision = example_decision()
+        resource = decision['resources'][0]
+        resource.update(description='1인당 1,70,000원 지원',
+                        description_evidence='1인당 1,700천원 지원',
+                        eligibility='중위소득 65% 이하 한부모가족',
+                        eligibility_evidence='중위소득 65% 이하 한부모가족, 생계급여 수급자 제외')
+        search = {'results': [dict(url=URL, content=resource['description_evidence'] + '. ' + resource['eligibility_evidence'])]}
+        result, _ = self.run_agent(decision, search)
+        self.assertEqual(result['exclusion_counts'], {'numeric_claim_not_grounded': 1})
+        for description in ('1인당 1,700,000원 지원', '1인당 170만원 지원'):
+            resource['description'] = description
+            result, _ = self.run_agent(decision, search)
+            self.assertEqual(result['total'], 1)
+            self.assertEqual(result['resources'][0]['eligibility'], resource['eligibility_evidence'])
+            self.assertEqual(result['resources'][0]['source']['description_evidence'], '1인당 1,700천원 지원')
+        resource['eligibility'] = '중위소득 80% 이하'
+        self.assertEqual(self.run_agent(decision, search)[0]['exclusion_counts'], {'numeric_claim_not_grounded': 1})
+
+    def test_unverifiable_target_quote_is_excluded_without_replacement(self):
+        decision = example_decision()
+        decision['resources'][0]['eligibility_evidence'] = '발췌문에 없는 가구 조건'
+        result, call = self.run_agent(decision)
+        self.assertEqual(result['total'], 0)
+        self.assertEqual(result['exclusion_counts'], {'quote_not_grounded': 1})
+        call.assert_called_once()
+
     def test_expansion_stops_on_limit_and_preserves_call_bound(self):
         for failure in (AgentError('한도', 429), AgentError('연결', 504)):
             search, call = Mock(side_effect=failure), Mock()
@@ -184,7 +394,7 @@ class LiveAgentTests(unittest.TestCase):
         call.assert_not_called()
 
     def test_partial_cache_reports_total_cost_and_source_dates(self):
-        search = Mock(side_effect=[{'results': [{'url': URL, 'content': '지역 안내'}], 'search_cache_hit': True,
+        search = Mock(side_effect=[{'results': [{'url': URL, 'content': '지역 안내 ' + FIXTURE_FACTS}], 'search_cache_hit': True,
                                    'search_date': '2026-10-18', 'usage': {'credits': 1}},
                                   {'results': [{'url': 'https://www.bokjiro.go.kr/service', 'content': '중앙 안내'}],
                                    'search_date': '2026-10-19', 'usage': {'credits': 1}}])

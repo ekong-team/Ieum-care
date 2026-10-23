@@ -16,7 +16,7 @@ class NodeContext:
     warnings: list[str] = field(default_factory=list)
 
     def count(self, provider: str, n: int = 1) -> None:
-        """provider: "gemini" 또는 "tavily". 비용·무료 한도 확인용."""
+        """gemini·tavily API와 official_page 공개 HTML GET 횟수를 구분한다."""
         self.calls[provider] += n
 
     def warn(self, message: str) -> None:

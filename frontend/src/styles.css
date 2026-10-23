@@ -893,6 +893,15 @@ dialog dd {
   line-height: 1.8;
   margin-top: 15px;
 }
+.search-diagnostics {
+  margin-top: 18px;
+  border-top: 1px solid var(--line, #dce6e0);
+  padding-top: 16px;
+}
+.search-diagnostics summary { cursor: pointer; font-weight: 600; }
+.search-review-source { border-top: 1px solid #dce6e0; margin-top: 16px; padding-top: 12px; }
+.search-review-source h4 { font-size: 13px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.search-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; }
 .source-dates {
   display: flex;
   gap: 5px 18px;
