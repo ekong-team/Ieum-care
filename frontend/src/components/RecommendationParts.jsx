@@ -333,6 +333,22 @@ export function SourceInfo({ item, detailed = false, cacheHit = false }) {
               {source.reference_year_evidence}
             </blockquote>
           )}
+          {source.description_evidence && (
+            <>
+              <strong>지원 내용 근거</strong>
+              <blockquote className="source-evidence">
+                {source.description_evidence}
+              </blockquote>
+            </>
+          )}
+          {source.eligibility_evidence && (
+            <>
+              <strong>대상·신청 조건 근거</strong>
+              <blockquote className="source-evidence">
+                {source.eligibility_evidence}
+              </blockquote>
+            </>
+          )}
           <p>{source.review_note}</p>
         </>
       )}
@@ -346,6 +362,9 @@ export function Review({ result }) {
   const review = result.review;
   const exclusions = {
     source_not_grounded: "검색 출처 미일치",
+    source_not_detail: "사업 상세 안내 부족",
+    quote_not_grounded: "지원 내용·조건의 원문 근거 미일치",
+    numeric_claim_not_grounded: "금액·조건 수치의 원문 근거 미일치",
     region_mismatch: "지역 불일치",
     closed: "종료 확인",
     purpose_mismatch: "지원 목적 불일치",
