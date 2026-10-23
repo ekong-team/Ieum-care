@@ -31,6 +31,7 @@ function ReportDialog({ html, filename, onClose }) {
         </div>
         <div className="analysis-actions">
           <button
+            className="primary"
             disabled={!ready}
             onClick={() => {
               frame.current.contentWindow.focus();
@@ -220,10 +221,10 @@ export default function Analysis({ active, model, openRecommendations }) {
         </button>
       </div>
       <ol className="analysis-flow" aria-label="분석에서 추천까지">
-        <li>데이터 계산·검증</li>
-        <li>집단별 근거 확인</li>
-        <li>선택 집단 외부 검토</li>
-        <li>1차 대상·복지추천</li>
+        <li><span className="step-number" aria-hidden="true">01</span>데이터 계산·검증</li>
+        <li><span className="step-number" aria-hidden="true">02</span>집단별 근거 확인</li>
+        <li><span className="step-number" aria-hidden="true">03</span>선택 집단 외부 검토</li>
+        <li><span className="step-number" aria-hidden="true">04</span>1차 대상·복지추천</li>
       </ol>
       {error && (
         <p className="analysis-error" role="alert">
@@ -307,6 +308,7 @@ export default function Analysis({ active, model, openRecommendations }) {
                 ))}
               </select>
               <button
+                className="primary"
                 disabled={blocked || !period}
                 onClick={() => start("offline")}
               >
@@ -456,6 +458,7 @@ export default function Analysis({ active, model, openRecommendations }) {
                   확인했습니다.
                 </label>
                 <button
+                  className="primary"
                   disabled={
                     blocked || !completed || !consent || !configurationReady
                   }
@@ -662,6 +665,7 @@ export default function Analysis({ active, model, openRecommendations }) {
                 </p>
                 <div className="analysis-actions">
                   <button
+                    className="primary"
                     disabled={!entry || blocked}
                     onClick={() => openRecommendations(entry)}
                   >
