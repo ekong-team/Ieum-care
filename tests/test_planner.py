@@ -252,6 +252,8 @@ class GraphConnectionTests(unittest.TestCase):
         # 공백 분석을 고정한다. 실제 공백 분석은 저장 자료로 C3=covered를 내므로 DRAFT의 C3 공백 주장이 거부된다.
         engines = replace(Engines(), recommend_existing=offline(Engines().recommend_existing),
                           search_trends=lambda ctx, planning: [], analyze_gaps=lambda ctx, planning: [GAP],
+                          # live 그래프라 실제 평가가 Gemini(실현 가능성)를 부르지 않도록 가짜 평가로 고정한다.
+                          evaluate_plans=stubs.evaluate_plans,
                           generate_plans=partial(planner.generate_plans,
                                                  call=fake_gemini([{**DRAFT, "trend_references": []}, TOO_LONG])))
         state = run_pipeline(PROFILE, mode="live", engines=engines, run_id=RUN_ID)
