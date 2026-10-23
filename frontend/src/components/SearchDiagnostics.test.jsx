@@ -8,6 +8,7 @@ import { downloadJSON } from "../domain.js";
 vi.mock("../domain.js", () => ({ downloadJSON: vi.fn() }));
 
 const result = {
+  resources: [],
   target: { region: "춘천시", age_group: 30, sex: "female" },
   risk_assessment: { assessment_id: "sample", period: "2025-12" },
   search_stages: [{ stage: "local", query: "춘천시 성인 복지서비스", source_count: 1, detail_hint_count: 0, searched_at: "2026-10-23" }],
@@ -27,7 +28,7 @@ test("추천 0개의 AI 보류 이유와 실제 발췌문을 보고 외부 호�
   await user.click(screen.getByText("검색·본문 근거 보기"));
   expect(screen.getByText("검토용 검색 발췌문")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "검색 검토 기록 내려받기" }));
-  expect(downloadJSON).toHaveBeenCalledWith(expect.objectContaining({ analysis_id: "sample", diagnostics: result.diagnostics }), "ieum-welfare-search-review.json");
+  expect(downloadJSON).toHaveBeenCalledWith(expect.objectContaining({ analysis_id: "sample", diagnostics: result.diagnostics, resources: result.resources }), "ieum-welfare-search-review.json");
 });
 
 test("이전 결과에 진단 기록이 없으면 새 이유를 만들어 표시하지 않는다", () => {
@@ -42,7 +43,8 @@ test("서버 제외와 AI 검토 사용을 구분하고 허용하지 않은 링�
   input.diagnostics.server_excluded_count = 1;
   input.diagnostics.sources[0].url = "javascript:alert(1)";
   input.diagnostics.sources[0].model_review = { status: "candidate_considered", reason: "조건부 검토 후보" };
-  input.diagnostics.sources[0].document = { status: "html_excerpt", fetched_at: "2026-10-23", truncated: true };
+  input.diagnostics.sources[0].document = { status: "html_excerpt", fetched_at: "2026-10-23", truncated: true,
+    redirects: [{ from_url: "https://www.chuncheon.go.kr/sample", to_url: "https://www.chuncheon.go.kr/sample/", http_status: 301 }] };
   input.diagnostics.sources[0].server_exclusions = [{ name: "검토 자원", reason: "numeric_claim_not_grounded" }];
   render(<SearchDiagnostics result={input} />);
   await userEvent.click(screen.getByText(/검색 출처·추천 보류 이유 확인/));
@@ -50,5 +52,30 @@ test("서버 제외와 AI 검토 사용을 구분하고 허용하지 않은 링�
   expect(screen.getByText(/서버 제외: 검토 자원 · 수치 근거 불일치/)).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
   expect(screen.getByText(/공식 본문: HTML 본문 일부 읽음 · 수집일 2026-10-23/)).toBeTruthy();
+  expect(screen.getByText(/정규 주소로 1회 이동/)).toBeTruthy();
   expect(screen.queryByText(/AI가 처음부터 후보를 제시하지 않았습니다/)).toBeNull();
+});
+
+test("본문 실패 유형과 검색 근거 보존·AI 설명 재검토를 구분해 표시한다", async () => {
+  const input = structuredClone(result);
+  input.diagnostics.sources[0].document = { status: "unavailable", reason: "redirect_blocked", http_status: 301 };
+  input.diagnostics.sources[0].model_review.warning = "fetch_failure_is_not_evidence_absence";
+  render(<SearchDiagnostics result={input} />);
+  await userEvent.click(screen.getByText(/검색 출처·추천 보류 이유 확인/));
+  expect(screen.getByText(/다른 주소로 이동 응답 · 자동 추적 중단 \(HTTP 301\)/)).toBeTruthy();
+  expect(screen.getByText(/검색 발췌는 별도로 남아 있습니다/)).toBeTruthy();
+  expect(screen.getByText(/이 보류 설명은 재검토가 필요합니다/)).toBeTruthy();
+});
+
+test("신청 마감 근거와 서버 제외를 지급 기간과 별도로 보여준다", async () => {
+  const input = structuredClone(result);
+  input.diagnostics.sources[0].application_period = {
+    status: "deadline_passed", deadline: "2026-05-29", evidence: "신청기간: 2026.3.30.~2026.5.29.",
+  };
+  input.diagnostics.sources[0].server_exclusions = [{ name: "검토 자원", reason: "application_deadline_passed" }];
+  render(<SearchDiagnostics result={input} />);
+  await userEvent.click(screen.getByText(/검색 출처·추천 보류 이유 확인/));
+  expect(screen.getByText(/신청·접수 기간: 명시 마감일 경과 \(2026-05-29\)/)).toBeTruthy();
+  expect(screen.getByText("신청기간: 2026.3.30.~2026.5.29.")).toBeTruthy();
+  expect(screen.getByText(/서버 제외: 검토 자원 · 명시된 신청 마감일 경과/)).toBeTruthy();
 });

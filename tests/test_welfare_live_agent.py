@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from ai.welfare_agent.live_agent import recommend_live, AgentError, official_url, response_call, tavily_search, search_evidence, search_resources, config_status, recency_hint, SEARCH_CACHE, SEARCH_CACHE_LIMIT
 
 URL = 'https://www.chuncheon.go.kr/service-test'
-FIXTURE_FACTS = '가상 검색 결과. 정확한 조건 확인 필요.'
+FIXTURE_FACTS = '가상 검색 결과. 정확한 조건 확인 필요. 서비스 이용 대상: 만 65세 이상.'
 
 
 def with_fixture_facts(search):
@@ -37,6 +37,8 @@ def example_decision():
         "isolation_relevance": "direct", "relevance_reason": "교류 활동이 있는 가상 자료에 근거한 분류입니다.",
         "reference_year": None, "reference_year_kind": "unknown", "reference_year_evidence": None,
         "description_evidence": "가상 검색 결과", "eligibility_evidence": "정확한 조건 확인 필요",
+        'age_evidence': '서비스 이용 대상: 만 65세 이상', 'format_evidence': None,
+        'schedule_evidence': None, 'restriction_evidence': [],
     }]}
 
 
@@ -253,6 +255,64 @@ class LiveAgentTests(unittest.TestCase):
         self.assertIn('가상 검색 근거', trace['sources'][0]['content'])
         self.assertNotIn('fake-test-key', json.dumps(trace))
         self.assertNotIn('fake-search-key', json.dumps(trace))
+
+    def test_failed_body_does_not_remove_search_and_fetch_only_reason_is_flagged(self):
+        decision = example_decision()
+        decision['resources'] = []
+        decision['source_reviews'] = [dict(source_url=URL, status='deferred',
+            reason='페이지 로드 실패로 내용을 확인할 수 없습니다.', evidence_quote=None)]
+        result, call = self.run_agent(decision)
+        source = result['diagnostics']['sources'][0]
+        self.assertTrue(source['evidence_availability']['search_excerpt'])
+        self.assertIn('가상 검색 근거', source['content'])
+        self.assertEqual(source['model_review']['warning'], 'fetch_failure_is_not_evidence_absence')
+        self.assertEqual(result['total'], 0)  # 경고만으로 후보를 새로 만들지 않는다.
+        instructions = call.call_args.args[0]['systemInstruction']['parts'][0]['text']
+        self.assertIn('본문 수집 실패만으로 후보를 보류', instructions)
+        decision['source_reviews'][0]['reason'] = '검색 발췌에 신청 대상의 소득 기준이 없어 확인이 필요합니다.'
+        self.assertNotIn('warning', self.run_agent(decision)[0]['diagnostics']['sources'][0]['model_review'])
+
+    def test_online_application_age_and_method_do_not_become_service_claims(self):
+        decision = example_decision()
+        resource = decision['resources'][0]
+        resource.update(age_ranges=[{'min':19, 'max':None}], age_evidence='온라인 신청은 만 19세 이상 본인만 가능',
+            format='오프라인 및 온라인 상담', format_evidence='행정복지센터 방문 신청 또는 온라인 신청',
+            schedule='연중 상시 신청', schedule_evidence=None)
+        search = copy.deepcopy(self.search)
+        search['results'][0]['content'] += ' 온라인 신청은 만 19세 이상 본인만 가능. 행정복지센터 방문 신청 또는 온라인 신청.'
+        result, _ = self.run_agent(decision, search)
+        item = result['resources'][0]
+        self.assertEqual(item['age_ranges'], [{'min':None, 'max':None}])
+        self.assertEqual(item['age_match'], 'unknown')
+        self.assertEqual(item['format'], '서비스 제공 방식 확인 필요')
+        self.assertEqual(item['schedule'], '모집·운영 기간 확인 필요')
+        self.assertEqual(set(item['claim_adjustments']), {'service_age_unconfirmed', 'format_unconfirmed', 'schedule_unconfirmed'})
+
+    def test_service_quotes_and_support_restrictions_are_kept_without_inventing_conditions(self):
+        decision = example_decision()
+        resource = decision['resources'][0]
+        resource.update(age_ranges=[{'min':18, 'max':59}], age_evidence='서비스 이용 대상: 만 18세~만 59세',
+            format_evidence='주 1회 대면 모임 제공', schedule_evidence='운영기간: 2026. 9. ~ 11.',
+            restriction_evidence=['연 1회 지원, 중복지원불가', '자료에 없는 무료 보장'])
+        search = copy.deepcopy(self.search)
+        search['results'][0]['content'] += ' 서비스 이용 대상: 만 18세~만 59세. 주 1회 대면 모임 제공. 운영기간: 2026. 9. ~ 11. 연 1회 지원, 중복지원불가.'
+        self.payload['target']['age_group'] = 30
+        item = self.run_agent(decision, search)[0]['resources'][0]
+        self.assertEqual(item['age_match'], 'overlap')
+        self.assertEqual(item['format'], '주 1회 대면 모임 제공')
+        self.assertEqual(item['schedule'], '운영기간: 2026. 9. ~ 11.')
+        self.assertIn('연 1회 지원, 중복지원불가', item['check'])
+        self.assertEqual(item['source']['restriction_evidence'], ['연 1회 지원, 중복지원불가'])
+        self.assertNotIn('자료에 없는 무료 보장', item['check'])
+
+    def test_service_claim_quotes_from_another_source_are_not_used(self):
+        decision = example_decision()
+        decision['resources'][0].update(age_evidence='대상: 만 19세 이상', schedule_evidence='연중 상시 신청')
+        search = copy.deepcopy(self.search)
+        search['results'][1]['content'] += ' 대상: 만 19세 이상. 연중 상시 신청.'
+        item = self.run_agent(decision, search)[0]['resources'][0]
+        self.assertEqual(item['age_match'], 'unknown')
+        self.assertEqual(item['schedule'], '모집·운영 기간 확인 필요')
 
     def test_server_exclusion_is_recorded_separately_from_ai_candidate_reason(self):
         decision = example_decision()
@@ -473,10 +533,12 @@ class LiveAgentTests(unittest.TestCase):
         decision = example_decision()
         original = copy.deepcopy(decision['resources'][0])
         decision['resources'] = [{**original, 'region': '강남구'},
-                                 {**original, 'age_ranges': [{'min': 20, 'max': 39}]},
+                                 {**original, 'age_ranges': [{'min': 20, 'max': 39}], 'age_evidence': '서비스 이용 대상: 만 20~39세'},
                                  {**original, 'availability_status': 'closed'},
                                  {**original, 'source_url': 'https://www.chuncheon.go.kr/not-in-search'}]
-        result, _ = self.run_agent(decision)
+        search = copy.deepcopy(self.search)
+        search['results'][0]['content'] += ' 서비스 이용 대상: 만 20~39세'
+        result, _ = self.run_agent(decision, search)
         self.assertEqual(result['total'], 0)
         self.assertEqual(result['exclusion_counts'], {'region_mismatch': 1, 'age_mismatch': 1,
                                                      'closed': 1, 'source_not_grounded': 1})
@@ -497,7 +559,11 @@ class LiveAgentTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 decision = example_decision()
                 decision['resources'][0].update(changes)
-                self.assertEqual(self.run_agent(decision)[0]['total'], 0)
+                search = copy.deepcopy(self.search)
+                if 'age_ranges' in changes:
+                    decision['resources'][0]['age_evidence'] = '서비스 이용 대상: 만 20~39세'
+                    search['results'][0]['content'] += ' 서비스 이용 대상: 만 20~39세'
+                self.assertEqual(self.run_agent(decision, search)[0]['total'], 0)
 
     def test_missing_search_key_does_not_consume_gemini_or_search(self):
         self.config['search_key'] = ''
