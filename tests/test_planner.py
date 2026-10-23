@@ -179,6 +179,16 @@ class AssembleTests(unittest.TestCase):
         ok = {**DRAFT, "operation": {"lead_candidates": [], "linked_existing_resources": ["youth"]}}
         self.assertEqual(planner.to_plan(ok, planning, "P-x-01", revision=0).operation.linked_existing_resources, ["youth"])
 
+    def test_cause_codes_in_text_become_labels(self):
+        # 실제 호출에서 나온 문장 형태 (2026-10-23)
+        draft = {**DRAFT, "assumptions": ["원인 C3_overall_withdrawal에 대한 구체적 원인 파악이 선행되어야 함"],
+                 "activities": [{**DRAFT["activities"][0], "description": "C3_overall_withdrawal 대응 모임"}]}
+        plan = planner.to_plan(draft, planning_input(), "P-x-01", revision=0)
+        self.assertEqual(plan.assumptions, ["원인 생활 전반 위축에 대한 구체적 원인 파악이 선행되어야 함"])
+        self.assertEqual(plan.activities[0].description, "생활 전반 위축 대응 모임")  # 안쪽 문장까지
+        self.assertEqual(plan.risk_causes_addressed, ["C3_overall_withdrawal"])  # 코드 필드는 그대로
+        self.assertEqual(plan.novelty.gap_causes, ["C3_overall_withdrawal"])
+
     def test_invalid_draft_is_dropped_with_reason(self):
         plans, notes = planner.assemble([DRAFT, TOO_LONG, DRAFT], planning_input())
         self.assertEqual([p.plan_id for p in plans], ["P-test0001-01", "P-test0001-03"])

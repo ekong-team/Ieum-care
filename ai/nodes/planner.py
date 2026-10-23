@@ -9,6 +9,7 @@ offline 모드(키 없음·테스트)는 외부 호출 없이 가짜 구현에 �
 """
 
 import json
+import re
 from typing import get_args
 
 from pydantic import ValidationError
@@ -226,6 +227,28 @@ class PlanningError(ValueError):
     """기획 결과를 쓸 수 없을 때. 노드가 실패로 기록되고 그래프는 리포트로 건너뛴다."""
 
 
+# 긴 코드부터 맞춰 본다. 지금은 서로 접두어가 겹치지 않지만, 코드가 늘어나도 짧은 쪽이 먼저 잡히지 않게 한다.
+CAUSE_CODE_PATTERN = re.compile("|".join(sorted(map(re.escape, CAUSE_LABELS), key=len, reverse=True)))
+CODE_VALUED_FIELDS = {"risk_causes_addressed", "gap_causes"}  # 값 자체가 원인 코드여야 하는 필드
+
+
+def readable(value, key: str | None = None):
+    """문장 속 원인 코드(C3_overall_withdrawal)를 이름(생활 전반 위축)으로 바꾼다.
+
+    프롬프트로 금지해도 가끔 새어 나오므로 코드에서 마무리한다. 내용은 멀쩡하고 표기만 틀린 경우라 버리지 않고 고친다.
+    코드 값이어야 하는 필드는 건드리지 않는다. dict·list는 안쪽까지 내려가며 바꾼다.
+    """
+    if key in CODE_VALUED_FIELDS:
+        return value
+    if isinstance(value, str):
+        return CAUSE_CODE_PATTERN.sub(lambda match: CAUSE_LABELS[match.group()], value)
+    if isinstance(value, list):
+        return [readable(item) for item in value]
+    if isinstance(value, dict):
+        return {k: readable(v, k) for k, v in value.items()}
+    return value
+
+
 def to_plan(draft: dict, planning, plan_id: str, revision: int) -> ProgramPlan:
     """LLM 초안 하나에 코드가 정하는 값을 채워 ProgramPlan으로 검증한다. 형식이 틀리면 예외를 낸다."""
     if not isinstance(draft, dict):
@@ -249,8 +272,9 @@ def to_plan(draft: dict, planning, plan_id: str, revision: int) -> ProgramPlan:
         raise PlanningError("대상 연령과 맞지 않거나 없는 기존 자원을 연계했습니다.")
     content ={key: value for key, value in draft.items() if key not in ("plan_id", "trend_references")}
     # content를 먼저 펼치고 고정값을 뒤에 둔다. LLM이 target·revision 등을 써 보내도 코드 값이 덮어쓴다.
-    return ProgramPlan.model_validate({**content, "plan_id": plan_id, "source": "generated", "revision": revision,
-                                       "target": planning.profile.target.model_dump(), "trend_references": references})
+    return ProgramPlan.model_validate(readable({**content, "plan_id": plan_id, "source": "generated",
+                                                "revision": revision, "target": planning.profile.target.model_dump(),
+                                                "trend_references": references}))
 
 
 def _error_summary(error: Exception) -> str:
