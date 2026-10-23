@@ -6,10 +6,12 @@ from html.parser import HTMLParser
 import re
 import ssl
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qsl, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 MAX_PAGES = 2
 MAX_BYTES = 1_200_000
+MAX_HTTP_REQUESTS = 4  # 안내 2개 × 원주소 및 정규 주소 이동 각 1회
 
 
 class PageReadError(ValueError):
@@ -33,7 +35,8 @@ def failure_info(error):
     if isinstance(error, LookupError):
         return dict(reason='unsupported_encoding')
     if isinstance(error, PageReadError) and error.args and error.args[0] in (
-            'page_size_limit', 'non_html', 'invalid_body', 'insufficient_text'):
+            'page_size_limit', 'non_html', 'invalid_body', 'insufficient_text',
+            'redirect_not_allowed', 'redirect_limit', 'request_limit', 'redirect_missing_location'):
         return dict(reason=error.args[0])
     if isinstance(error, OSError):
         return dict(reason='connection_failed')
@@ -46,13 +49,25 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def fetch_official_html(url):
-    # URL 검사는 enrich_evidence에서 수행한다. 리디렉션을 따라 새 주소를 수집하지 않는다.
+    # 자동 이동은 끈다. 수집기가 목적지와 횟수를 검사한 뒤 별도 GET한다.
     request = Request(url, headers={'User-Agent': 'Ieum-care-welfare/1.0', 'Accept': 'text/html'})
-    with build_opener(NoRedirect()).open(request, timeout=10) as response:
+    with build_opener(NoRedirect()).open(request, timeout=8) as response:
         raw = response.read(MAX_BYTES + 1)
         if len(raw) > MAX_BYTES:
             raise PageReadError('page_size_limit')
         return raw, response.headers.get('Content-Type', '')
+
+
+def canonical_redirect(original, target, validate_url):
+    """같은 호스트·같은 경로·같은 질의의 정규 주소 이동만 허용한다 (예: 끝의 /)."""
+    valid = validate_url(target)
+    if not valid:
+        return None
+    before, after = urlsplit(original), urlsplit(valid)
+    if (before.hostname != after.hostname or before.path.rstrip('/') != after.path.rstrip('/')
+            or sorted(parse_qsl(before.query, keep_blank_values=True)) != sorted(parse_qsl(after.query, keep_blank_values=True))):
+        return None
+    return valid
 
 
 class PageText(HTMLParser):
@@ -88,14 +103,35 @@ def enrich_evidence(evidence, validate_url, *, getter=None, on_external_call=Non
         item['search_snippet'] = item['content']
         item['evidence_availability'] = dict(search_excerpt=bool(item['content'].strip()), official_html_excerpt=False)
         item['document'] = {'status': 'not_fetched'}
+    requests = 0
     for item in selected:
         if validate_url(item['url']) != item['url']:
             item['document'] = {'status': 'unavailable', 'reason': 'url_not_allowed'}
             continue
         try:
-            if on_external_call:
-                on_external_call('official_page')
-            raw, content_type = (getter or fetch_official_html)(item['url'])
+            current, redirects = item['url'], []
+            while True:
+                if requests >= MAX_HTTP_REQUESTS:
+                    raise PageReadError('request_limit')
+                requests += 1
+                if on_external_call:
+                    on_external_call('official_page')
+                try:
+                    raw, content_type = (getter or fetch_official_html)(current)
+                    break
+                except HTTPError as error:
+                    if error.code not in (301, 302, 303, 307, 308):
+                        raise
+                    if redirects:
+                        raise PageReadError('redirect_limit') from None
+                    location = error.headers.get('Location') if error.headers else None
+                    if not location:
+                        raise PageReadError('redirect_missing_location') from None
+                    target = canonical_redirect(current, urljoin(current, location), validate_url)
+                    if not target or target == current:
+                        raise PageReadError('redirect_not_allowed') from None
+                    redirects.append(dict(from_url=current, to_url=target, http_status=error.code))
+                    current = target
             if not isinstance(raw, bytes):
                 raise PageReadError('invalid_body')
             if len(raw) > MAX_BYTES:
@@ -116,9 +152,10 @@ def enrich_evidence(evidence, validate_url, *, getter=None, on_external_call=Non
             item['content'] = '검색 발췌:\n' + snippet + '\n공식 HTML 본문 발췌:\n' + text[:10000]
             item['document'] = dict(status='html_excerpt', sha256=hashlib.sha256(raw).hexdigest(),
                                     text_characters=min(len(text), 10000), truncated=len(text) > 10000,
-                                    fetched_at=datetime.now(timezone(timedelta(hours=9))).date().isoformat())
+                                    fetched_at=datetime.now(timezone(timedelta(hours=9))).date().isoformat(),
+                                    final_url=current, redirects=redirects)
             item['evidence_availability']['official_html_excerpt'] = True
         except Exception as error:
             # 원문 응답·오류 문자열을 노출하지 않는다. 실패해도 기존 검색 발췌는 보존한다.
-            item['document'] = dict(status='unavailable', **failure_info(error))
+            item['document'] = dict(status='unavailable', **failure_info(error), redirects=redirects)
     return result

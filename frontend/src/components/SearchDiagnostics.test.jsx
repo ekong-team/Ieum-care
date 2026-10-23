@@ -43,7 +43,8 @@ test("서버 제외와 AI 검토 사용을 구분하고 허용하지 않은 링�
   input.diagnostics.server_excluded_count = 1;
   input.diagnostics.sources[0].url = "javascript:alert(1)";
   input.diagnostics.sources[0].model_review = { status: "candidate_considered", reason: "조건부 검토 후보" };
-  input.diagnostics.sources[0].document = { status: "html_excerpt", fetched_at: "2026-10-23", truncated: true };
+  input.diagnostics.sources[0].document = { status: "html_excerpt", fetched_at: "2026-10-23", truncated: true,
+    redirects: [{ from_url: "https://www.chuncheon.go.kr/sample", to_url: "https://www.chuncheon.go.kr/sample/", http_status: 301 }] };
   input.diagnostics.sources[0].server_exclusions = [{ name: "검토 자원", reason: "numeric_claim_not_grounded" }];
   render(<SearchDiagnostics result={input} />);
   await userEvent.click(screen.getByText(/검색 출처·추천 보류 이유 확인/));
@@ -51,6 +52,7 @@ test("서버 제외와 AI 검토 사용을 구분하고 허용하지 않은 링�
   expect(screen.getByText(/서버 제외: 검토 자원 · 수치 근거 불일치/)).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
   expect(screen.getByText(/공식 본문: HTML 본문 일부 읽음 · 수집일 2026-10-23/)).toBeTruthy();
+  expect(screen.getByText(/정규 주소로 1회 이동/)).toBeTruthy();
   expect(screen.queryByText(/AI가 처음부터 후보를 제시하지 않았습니다/)).toBeNull();
 });
 

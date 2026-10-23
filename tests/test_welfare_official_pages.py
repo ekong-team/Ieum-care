@@ -55,7 +55,7 @@ class OfficialPagesTests(unittest.TestCase):
 
     def test_failure_categories_preserve_search_and_do_not_expose_exception_text(self):
         cases = [
-            (HTTPError('https://private-test', 301, 'private detail', {}, None), 'redirect_blocked'),
+            (HTTPError('https://private-test', 301, 'private detail', {}, None), 'redirect_missing_location'),
             (HTTPError('https://private-test', 403, 'private detail', {}, None), 'http_error'),
             (TimeoutError('private detail'), 'timeout'),
             (URLError(TimeoutError('private detail')), 'timeout'),
@@ -74,8 +74,47 @@ class OfficialPagesTests(unittest.TestCase):
                 self.assertEqual(result['content'], '짧은 검색 발췌')
                 self.assertEqual(result['search_snippet'], '짧은 검색 발췌')
                 self.assertNotIn('private', str(result))
-                if isinstance(error, HTTPError):
+                if isinstance(error, HTTPError) and reason == 'http_error':
                     self.assertEqual(result['document']['http_status'], error.code)
+
+    def test_canonical_redirect_is_followed_once_and_both_requests_are_counted(self):
+        url = 'https://www.chuncheon.go.kr/test?id=1'
+        html = ('<html><body>' + '지원 대상과 기간을 확인하는 안내문입니다. '*12 + '</body></html>').encode()
+        redirect = HTTPError(url, 301, 'moved', {'Location':'/test/?id=1'}, None)
+        getter = Mock(side_effect=[redirect, (html, 'text/html')])
+        calls = []
+        result = enrich_evidence([page(url)], official_url, getter=getter, on_external_call=calls.append)[0]
+        self.assertEqual(result['document']['status'], 'html_excerpt')
+        self.assertEqual(result['document']['final_url'], 'https://www.chuncheon.go.kr/test/?id=1')
+        self.assertEqual(getter.call_args_list[1].args[0], result['document']['final_url'])
+        self.assertEqual(calls, ['official_page', 'official_page'])
+
+    def test_redirect_does_not_cross_host_change_service_or_loop(self):
+        url = 'https://www.chuncheon.go.kr/test?id=1'
+        for location in ('https://evil.com/test/?id=1', 'http://www.chuncheon.go.kr/test/?id=1',
+                         'https://www.gangnam.go.kr/test/?id=1', '/different?id=1', '/test/?id=2'):
+            getter = Mock(side_effect=HTTPError(url, 301, 'moved', {'Location':location}, None))
+            result = enrich_evidence([page(url)], official_url, getter=getter)[0]
+            getter.assert_called_once()
+            self.assertEqual(result['document']['reason'], 'redirect_not_allowed')
+            self.assertNotIn(location, str(result['document']))
+        getter = Mock(side_effect=[HTTPError(url, 301, 'moved', {'Location':'/test/?id=1'}, None),
+                                  HTTPError(url, 301, 'moved', {'Location':'/test?id=1'}, None)])
+        result = enrich_evidence([page(url)], official_url, getter=getter)[0]
+        self.assertEqual(result['document']['reason'], 'redirect_limit')
+        self.assertEqual(getter.call_count, 2)
+
+    def test_two_pages_with_one_redirect_each_stay_within_four_gets(self):
+        html = ('<html><body>' + '지원 안내문입니다. '*20 + '</body></html>').encode()
+        def get(url):
+            if not url.endswith('/'):
+                raise HTTPError(url, 301, 'moved', {'Location':url+'/'}, None)
+            return html, 'text/html'
+        getter = Mock(side_effect=get)
+        result = enrich_evidence([page('https://www.chuncheon.go.kr/a'), page('https://www.chuncheon.go.kr/b'),
+                                  page('https://www.chuncheon.go.kr/c')], official_url, getter=getter)
+        self.assertEqual(getter.call_count, 4)
+        self.assertEqual(result[2]['document']['status'], 'not_fetched')
 
     def test_content_and_encoding_failures_are_distinct(self):
         cases = [
@@ -117,7 +156,7 @@ class OfficialPagesTests(unittest.TestCase):
         self.assertIsNone(request.get_header('Cookie'))
         self.assertIsNone(request.get_header('X-goog-api-key'))
         response.read.assert_called_once_with(MAX_BYTES + 1)
-        self.assertEqual(opener.open.call_args.kwargs['timeout'], 10)
+        self.assertEqual(opener.open.call_args.kwargs['timeout'], 8)
         self.assertIsNone(NoRedirect().redirect_request(None, None, None, None, None, None))
         opener.open.side_effect = HTTPError('https://www.chuncheon.go.kr/test', 302, 'redirect', {}, None)
         with patch('ai.welfare_agent.official_pages.build_opener', return_value=opener), self.assertRaises(HTTPError):

@@ -350,6 +350,15 @@ export function SourceInfo({ item, detailed = false, cacheHit = false }) {
               </blockquote>
             </>
           )}
+          {!!source.restriction_evidence?.length && (
+            <>
+              <strong>지원 횟수·중복·비용 등의 제한 근거</strong>
+              {source.restriction_evidence.map((quote, index) => (
+                <blockquote className="source-evidence" key={index}>{quote}</blockquote>
+              ))}
+            </>
+          )}
+          {!!item.claim_adjustments?.length && <p className="muted">일부 조건은 원문 근거가 충분하지 않아 확인 필요로 남겼습니다. 서비스 대상 나이와 신청 채널의 나이는 다를 수 있습니다.</p>}
           <p>{source.review_note}</p>
         </>
       )}

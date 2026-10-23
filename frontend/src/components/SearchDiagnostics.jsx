@@ -6,6 +6,10 @@ const recency = { current_year_mentioned: "현재 연도 언급", older_years_on
 const statuses = { candidate_considered: "AI 후보 검토에 사용", deferred: "AI 보류", not_recorded: "AI 설명 기록 없음", invalid_record: "AI 설명 확인 불가" };
 const documentFailures = {
   redirect_blocked: "다른 주소로 이동 응답 · 자동 추적 중단",
+  redirect_not_allowed: "같은 공식 안내의 정규 주소 이동 조건 미충족",
+  redirect_limit: "주소 이동 횟수 제한 도달",
+  redirect_missing_location: "이동 응답에 목적지 주소 없음",
+  request_limit: "본문 GET 횟수 제한 도달",
   http_error: "서버 HTTP 오류",
   timeout: "응답 시간 초과",
   tls_error: "보안 연결·인증서 오류",
@@ -57,6 +61,7 @@ export default function SearchDiagnostics({ result }) {
       <h4>{officialLink(source.url) ? <a href={source.url} target="_blank" rel="noreferrer">{source.title || "공식 출처 열기"} ↗</a> : "출처 링크 확인 필요"}</h4>
       <p className="muted">{kinds[source.source_kind] || "자료 종류 미확인"} · {recency[source.recency_hint] || "연도 단서 미기록"} · 검색일 {source.searched_at}</p>
       {source.document && <p className="muted">공식 본문: {({ html_excerpt: "HTML 본문 일부 읽음", unavailable: "읽기 실패 · 검색 발췌만 사용", not_fetched: "미수집 · 검색 발췌만 사용" })[source.document.status] || "상태 확인 필요"}{source.document.fetched_at ? ` · 수집일 ${source.document.fetched_at}` : ""}{source.document.truncated ? " · 길이 제한으로 일부만 제공" : ""}</p>}
+      {!!source.document?.redirects?.length && <p className="muted">같은 공식 안내의 정규 주소로 {source.document.redirects.length}회 이동 · 이동 기록은 다운로드에 포함됩니다.</p>}
       {source.document?.status === "unavailable" && <p className="muted">수집 실패 사유: {documentFailures[source.document.reason] || "기록되지 않은 오류"}{source.document.http_status ? ` (HTTP ${source.document.http_status})` : ""}. 검색 발췌는 별도로 남아 있습니다.</p>}
       <p><strong>{statuses[source.model_review?.status] || "AI 설명 기록 없음"}</strong></p>
       {source.model_review?.reason && <p>{source.model_review.reason}</p>}
