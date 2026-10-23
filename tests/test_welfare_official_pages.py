@@ -1,8 +1,9 @@
 """공식 HTML 보완 수집은 실제 네트워크 없이 제한·실패·근거 보존을 검사한다."""
 import copy
+import ssl
 import unittest
 from unittest.mock import Mock, MagicMock, patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from ai.welfare_agent.live_agent import official_url
 from ai.welfare_agent.official_pages import enrich_evidence, fetch_official_html, MAX_BYTES, NoRedirect
@@ -51,6 +52,56 @@ class OfficialPagesTests(unittest.TestCase):
         result = enrich_evidence([page('https://evil.com/data')], official_url, getter=getter)
         getter.assert_not_called()
         self.assertEqual(result[0]['document']['reason'], 'url_not_allowed')
+
+    def test_failure_categories_preserve_search_and_do_not_expose_exception_text(self):
+        cases = [
+            (HTTPError('https://private-test', 301, 'private detail', {}, None), 'redirect_blocked'),
+            (HTTPError('https://private-test', 403, 'private detail', {}, None), 'http_error'),
+            (TimeoutError('private detail'), 'timeout'),
+            (URLError(TimeoutError('private detail')), 'timeout'),
+            (URLError(ssl.SSLError('private detail')), 'tls_error'),
+            (URLError('private detail'), 'connection_failed'),
+            (OSError('private detail'), 'connection_failed'),
+            (RuntimeError('private detail'), 'page_read_failed'),
+        ]
+        for error, reason in cases:
+            with self.subTest(reason=reason):
+                result = enrich_evidence([page('https://www.chuncheon.go.kr/test')], official_url,
+                                         getter=Mock(side_effect=error))[0]
+                self.assertEqual(result['document']['reason'], reason)
+                self.assertTrue(result['evidence_availability']['search_excerpt'])
+                self.assertFalse(result['evidence_availability']['official_html_excerpt'])
+                self.assertEqual(result['content'], '짧은 검색 발췌')
+                self.assertEqual(result['search_snippet'], '짧은 검색 발췌')
+                self.assertNotIn('private', str(result))
+                if isinstance(error, HTTPError):
+                    self.assertEqual(result['document']['http_status'], error.code)
+
+    def test_content_and_encoding_failures_are_distinct(self):
+        cases = [
+            ((b'%PDF', 'application/pdf'), 'non_html'),
+            ((b'a' * (MAX_BYTES+1), 'text/html'), 'page_size_limit'),
+            ((b'<html></html>', 'text/html'), 'insufficient_text'),
+            ((b'\xff', 'text/html; charset=utf-8'), 'decode_failed'),
+            ((b'html', 'text/html; charset=unknown-private'), 'unsupported_encoding'),
+            (('not bytes', 'text/html'), 'invalid_body'),
+        ]
+        for response, reason in cases:
+            with self.subTest(reason=reason):
+                result = enrich_evidence([page('https://www.chuncheon.go.kr/test')], official_url,
+                                         getter=Mock(return_value=response))[0]
+                self.assertEqual(result['document']['reason'], reason)
+                self.assertEqual(result['search_snippet'], '짧은 검색 발췌')
+                self.assertNotIn('unknown-private', str(result))
+
+    def test_explicit_html_meta_charset_is_used_without_retry(self):
+        html = ('<html><head><meta charset="euc-kr"></head><body>' + '거주 및 소득 조건 확인 안내. '*20 + '</body></html>').encode('euc-kr')
+        getter = Mock(return_value=(html, 'text/html'))
+        result = enrich_evidence([page('https://www.chuncheon.go.kr/test')], official_url, getter=getter)[0]
+        getter.assert_called_once()
+        self.assertEqual(result['document']['status'], 'html_excerpt')
+        self.assertTrue(result['evidence_availability']['official_html_excerpt'])
+        self.assertIn('거주 및 소득 조건', result['content'])
 
     def test_transport_has_no_credentials_size_bound_and_no_redirect_follow(self):
         response = MagicMock()

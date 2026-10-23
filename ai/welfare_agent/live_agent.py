@@ -366,6 +366,11 @@ ratio와 percent를 혼동하지 말고 수치·출처를 새로 만들지 마�
 분석 결과가 없으면 소비·이동 감소가 관측되었다고 서술하지 마라. 선택 지역·연령·성별 조건만 받은 것이다.
 document.status=html_excerpt이면 공식 HTML에서 제한된 본문을 추가로 읽은 자료다.
 검색 발췌와 본문 발췌를 구분하고, 둘 다 원문 전체·현재 운영·개인 자격 검증을 뜻하지 않음을 보존하라.
+document.status=unavailable은 추가 HTML 수집 실패일 뿐 검색 발췌가 없다는 뜻이 아니다.
+evidence_availability.search_excerpt=true이면 search_snippet과 content의 검색 근거를 반드시 검토하라.
+본문 수집 실패만으로 후보를 보류하거나 '자료를 확인할 수 없다'고 쓰지 마라.
+보류하려면 남아 있는 검색 근거에서 지원 내용·대상 조건·기간 중 구체적으로 무엇이 부족한지 설명하라.
+검색 발췌만으로 인용·조건을 확보한 후보는 기존 검사를 거쳐 제시할 수 있다. 원문을 읽었다고 표현하지 마라.
 target.sex와 risk_assessment.sex를 보존하여 선택 집단을 해석하라. all은 남녀 합산이다.
 age_group=10은 10~19세이며 10세 미만 아동은 포함하지 않는다.
 성별만으로 욕구·질환·경제 상태를 추정하지 마라. 성별 제한 자격은 공식 근거에 따라 확인하며 미확인 조건은 확인 사항에 남겨라.
@@ -548,6 +553,12 @@ def recommendation_diagnostics(decision, result, evidence, source_dates):
             if valid and (quote is None or valid_quote) and consistent:
                 model_review = dict(status=review['status'], reason=reader_text(reason), evidence_quote=quote,
                                     quote_status='matched_excerpt' if quote is not None else 'not_provided')
+                # 수집 실패만 되풀이한 AI 설명은 재검토 표시한다. 후보를 강제로 추가하지 않는다.
+                normalized_reason = re.sub(r'\s+', '', reason)
+                if (review['status'] == 'deferred' and item.get('document', {}).get('status') == 'unavailable'
+                        and item.get('search_snippet', '').strip()
+                        and any(word in normalized_reason for word in ('로드실패', '로딩실패', '수집실패', '읽기실패', '접속실패', '접근불가'))):
+                    model_review['warning'] = 'fetch_failure_is_not_evidence_absence'
             else:
                 model_review['status'] = 'invalid_record'
         rows.append(dict(**item, searched_at=source_dates[item['url']], model_review=model_review,

@@ -254,6 +254,22 @@ class LiveAgentTests(unittest.TestCase):
         self.assertNotIn('fake-test-key', json.dumps(trace))
         self.assertNotIn('fake-search-key', json.dumps(trace))
 
+    def test_failed_body_does_not_remove_search_and_fetch_only_reason_is_flagged(self):
+        decision = example_decision()
+        decision['resources'] = []
+        decision['source_reviews'] = [dict(source_url=URL, status='deferred',
+            reason='페이지 로드 실패로 내용을 확인할 수 없습니다.', evidence_quote=None)]
+        result, call = self.run_agent(decision)
+        source = result['diagnostics']['sources'][0]
+        self.assertTrue(source['evidence_availability']['search_excerpt'])
+        self.assertIn('가상 검색 근거', source['content'])
+        self.assertEqual(source['model_review']['warning'], 'fetch_failure_is_not_evidence_absence')
+        self.assertEqual(result['total'], 0)  # 경고만으로 후보를 새로 만들지 않는다.
+        instructions = call.call_args.args[0]['systemInstruction']['parts'][0]['text']
+        self.assertIn('본문 수집 실패만으로 후보를 보류', instructions)
+        decision['source_reviews'][0]['reason'] = '검색 발췌에 신청 대상의 소득 기준이 없어 확인이 필요합니다.'
+        self.assertNotIn('warning', self.run_agent(decision)[0]['diagnostics']['sources'][0]['model_review'])
+
     def test_server_exclusion_is_recorded_separately_from_ai_candidate_reason(self):
         decision = example_decision()
         decision['resources'][0]['description'] = '100만원 지원'
