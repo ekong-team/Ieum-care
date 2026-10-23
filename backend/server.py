@@ -19,6 +19,7 @@ from ai.contracts import ExistingResources  # noqa: E402
 from ai.nodes.welfare import attach_response_routes, to_existing_resources  # noqa: E402
 from ai.welfare_agent.analysis_input import prepare_analysis_inputs, latest_analysis_inputs  # noqa: E402
 from ai.welfare_agent.planning_handoff import PlanningInbox  # noqa: E402
+from backend.analysis import AnalysisService  # noqa: E402
 
 LIVE_SLOT = BoundedSemaphore(1)
 
@@ -44,6 +45,17 @@ class Handler(SimpleHTTPRequestHandler):
                       '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css'}
 
     def do_GET(self):
+        if self.path == '/api/analysis/job':
+            self.send_json(HTTPStatus.OK, self.server.analysis_service.state())
+            return
+        if self.path == '/api/analysis/result':
+            try:
+                self.send_json(HTTPStatus.OK, self.server.analysis_service.result())
+            except FileNotFoundError:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': '완료된 분석 결과가 없습니다. 먼저 입력 데이터를 준비해주세요.'})
+            except (OSError, ValueError, KeyError, TypeError):
+                self.send_json(HTTPStatus.CONFLICT, {'error': '저장된 분석 결과를 검증하지 못했습니다. 마지막 실행 상태를 확인해주세요.'})
+            return
         if self.path == '/api/planning/requests':
             try:
                 self.send_json(HTTPStatus.OK, {'schema_version': 'planning-inbox-0.1', 'agent_connected': False,
@@ -81,6 +93,33 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == '/api/analysis/runs':
+            origin = self.headers.get('Origin')
+            allowed = {f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost')
+                       for port in (self.server.server_port, 5173)}
+            if origin is not None and origin not in allowed:
+                self.send_json(HTTPStatus.FORBIDDEN, {'error': '로컬 서비스 화면에서 실행해주세요.'})
+                return
+            if self.headers.get_content_type() != 'application/json':
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 2048:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {'error': '분석 요청 크기를 확인해주세요.'})
+                    return
+                result = self.server.analysis_service.start(json.loads(self.rfile.read(length)))
+            except BlockingIOError as error:
+                self.send_json(HTTPStatus.CONFLICT, {'error': str(error)})
+                return
+            except (FileNotFoundError, OSError):
+                self.send_json(HTTPStatus.CONFLICT, {'error': '분석 입력과 최신 결과 파일을 확인해주세요.'})
+                return
+            except (ValueError, TypeError, KeyError, UnicodeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': '기준월·집단·외부 전송 확인 또는 API 키 설정을 확인해주세요.'})
+                return
+            self.send_json(HTTPStatus.ACCEPTED, result)
+            return
         if self.path == '/api/planning/requests':
             if self.headers.get_content_type() != 'application/json':
                 self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
@@ -169,6 +208,7 @@ def create_server(port=5175, *, planning_root=None):
     # React 빌드 결과만 제공한다. 소스·설정·원본 데이터는 정적 경로에 포함하지 않는다.
     server = LocalServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend/dist")))
     server.analysis_inputs = None
+    server.analysis_service = AnalysisService(ROOT, LIVE_SLOT, lambda: setattr(server, 'analysis_inputs', None))
     server.planning_inbox = PlanningInbox(planning_root or ROOT / 'data/processed/planning_requests')
     return server
 

@@ -1,7 +1,13 @@
 """부족한 정보별 검색 계획, 발췌 적합성 검사, 사람이 읽는 분석 설명."""
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
+from io import BytesIO
+from pathlib import Path
+from urllib.error import HTTPError
+import hashlib
+import json
 import re
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urljoin
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Literal
@@ -14,9 +20,174 @@ QUESTIONS = {
 }
 KEYWORDS = {
     "population": ("인구", "주민등록", "세대", "전입", "전출"),
-    "economy": ("경제", "경기", "소비", "상권", "소매"),
-    "calendar": ("공휴일", "휴일", "행사", "축제", "월력", "성탄절", "기상", "계절"),
+    "economy": ("경제", "경기", "소비", "상권", "소매", "관광", "방문객", "방문자"),
+    "calendar": ("공휴일", "휴일", "행사", "축제", "월력", "성탄절", "기상", "계절", "기후", "기온"),
 }
+
+# 수동 원문 검토로 확보한 출처의 주소만 등록한다. 다른 기준월에 재사용하지 않는다.
+# 검색 자동 발견과 구분하며 숫자는 입력 지표에 병합하지 않는다.
+def known_sources(profile, question_id):
+    if (profile.target.region, profile.period, question_id) != ('춘천시', '2025-12', 'economy'):
+        return []
+    return [dict(title='최근 강원지역 실물경제동향(2026.2월)',
+        url='https://www.bok.or.kr/fileSrc/portal/3adafa1239c243f782ef5352d8edddb8/1/43cfd903ac08443db7c83214c06df39d.pdf',
+        snippet='', published_date='2026-02-10', temporal_status='publication_after_target_period',
+        verification='registered_official_url_not_yet_fetched', discovery='previously_reviewed_official_reference',
+        reviewed_pages=[1, 3],
+        expected_sha256='6a152956be45dde6655897865dfccb9a97a6e9e891e159c4a50e3c6dde183c17')]
+
+
+class _DocumentHTML(HTMLParser):
+    """정적 본문과 공개 PDF 링크만 읽는다. 스크립트·폼을 실행하지 않는다."""
+    def __init__(self):
+        super().__init__()
+        self.text, self.links, self.anchor = [], [], None
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "noscript"):
+            self.hidden += 1
+        if tag == "a":
+            self.anchor = [dict(attrs).get("href", ""), ""]
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.text.append(data)
+            if self.anchor is not None:
+                self.anchor[1] += data
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript"):
+            self.hidden = max(0, self.hidden - 1)
+        if tag == "a" and self.anchor is not None:
+            self.links.append(tuple(self.anchor))
+            self.anchor = None
+
+
+class OfficialDocuments:
+    """집단 실행당 GET4회·PDF2개·파일30MB까지. 키 없이 공식 자료만 수집한다."""
+    def __init__(self, getter, cache=None):
+        self.getter, self.cache = getter, Path(cache) if cache else None
+        self.requests, self.pdfs = 0, 0
+        self.receipts = []
+
+    def _read(self, url, chain=()):
+        from ai.analysis_agent.model import official_url
+        if not official_url(url):
+            raise ValueError("document_domain_not_allowed")
+        if url in chain or len(chain) > 2:
+            raise ValueError("document_redirect_limit")
+        key = hashlib.sha256(url.encode()).hexdigest()
+        if self.cache:
+            path = self.cache / (key + ".bin")
+            meta_path = self.cache / (key + ".json")
+            if path.exists() and meta_path.exists():
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                if meta.get("url") != url or path.stat().st_size > 30_000_000:
+                    raise ValueError("document_cache_invalid")
+                raw = path.read_bytes()
+                if hashlib.sha256(raw).hexdigest() != meta.get("sha256"):
+                    raise ValueError("document_cache_hash_changed")
+                self.receipts.append(dict(url=url, status="cache_hit", sha256=meta["sha256"], bytes=len(raw)))
+                return raw, meta.get("content_type", "")
+        if self.requests >= 4:
+            raise ValueError("document_request_limit")
+        self.requests += 1
+        record = dict(url=url, status="attempted")
+        self.receipts.append(record)
+        try:
+            raw, content_type = self.getter(url)
+            if not isinstance(raw, bytes) or len(raw) > 30_000_000:
+                raise ValueError("document_size_limit")
+            meta = dict(url=url, sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw),
+                        content_type=content_type, retrieved_at=datetime.now(timezone.utc).isoformat())
+            record.update(status="downloaded", sha256=meta["sha256"], bytes=len(raw))
+            if self.cache:
+                self.cache.mkdir(parents=True, exist_ok=True)
+                (self.cache / (key + ".bin")).write_bytes(raw)
+                (self.cache / (key + ".json")).write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+            return raw, content_type
+        except Exception as error:
+            record.update(status="failed", error_type=type(error).__name__)
+            if isinstance(error, HTTPError) and error.code in (301, 302, 303, 307, 308):
+                target = urljoin(url, error.headers.get("Location", ""))
+                error.close()
+                if not official_url(target):
+                    raise ValueError("document_redirect_domain_not_allowed") from None
+                record.update(status="redirect", redirect_url=target)
+                return self._read(target, chain + (url,))
+            raise
+
+    def _extract(self, url):
+        raw, content_type = self._read(url)
+        digest = hashlib.sha256(raw).hexdigest()
+        if raw.startswith(b"%PDF"):
+            if self.pdfs >= 2:
+                raise ValueError("document_pdf_limit")
+            self.pdfs += 1
+            from pypdf import PdfReader
+            reader = PdfReader(BytesIO(raw))
+            if reader.is_encrypted or len(reader.pages) > 150:
+                raise ValueError("document_pdf_not_supported")
+            pages = [(i+1, (page.extract_text() or "")[:20_000]) for i, page in enumerate(reader.pages)]
+            return pages, [], digest, "pdf_text" if any(t.strip() for _, t in pages) else "image_only_requires_review"
+        if len(raw) > 2_000_000 or ("html" not in content_type.lower() and not raw.lstrip().startswith((b"<!", b"<html"))):
+            raise ValueError("document_type_not_supported")
+        match = re.search(r"charset\s*=\s*([\w-]+)", content_type, re.I)
+        encoding = match.group(1) if match else "utf-8"
+        parser = _DocumentHTML()
+        parser.feed(raw.decode(encoding, errors="replace"))
+        links = [urljoin(url, href) for href, title in parser.links if ".pdf" in (href + title).lower()]
+        return [(None, "\n".join(parser.text))], links, digest, "html_text"
+
+    def enrich(self, source, profile, question_id):
+        """검색 후보에 실제 본문 발췌와 출처 페이지를 붙인다. 숫자는 자동 병합하지 않는다."""
+        from ai.analysis_agent.model import official_url
+        result = dict(source)
+        start = len(self.receipts)
+        try:
+            pages, links, digest, status = self._extract(source["url"])
+            if source.get('expected_sha256') and source['expected_sha256'] != digest:
+                raise ValueError('registered_document_changed')
+            document_url = source["url"]
+            if status == "html_text" and self.pdfs < 2:
+                for link in links[:2]:
+                    if not official_url(link):
+                        continue
+                    try:
+                        pages, _, digest, status = self._extract(link)
+                        document_url = link
+                        break
+                    except Exception:
+                        continue
+            year, month = profile.period.split("-")
+            pattern = rf"{year}\s*(?:년|[-./])\s*0?{int(month)}\s*(?:월|[^0-9]|$)"
+            def score(entry):
+                text = compact(entry[1])
+                return (4 * bool(re.search(pattern, entry[1])) +
+                        4 * (profile.target.region.removesuffix("시").removesuffix("구") in text) +
+                        2 * any(word in text for word in KEYWORDS[question_id]))
+            # 등록된 원문도 실제로 읽고 검사한다. 3쪽은 사전 표 검토로 확인한 소비 본문이다.
+            selected = ([page for page in pages if page[0] in source['reviewed_pages']][:2] if
+                source.get('expected_sha256') and source.get('reviewed_pages') else
+                sorted(pages, key=score, reverse=True)[:2])
+            excerpts = []
+            page_budget = (1500 - max(0, len(selected)-1)) // max(1, len(selected))
+            for _, text in selected:
+                match = re.search(pattern, text)
+                offset = max(0, match.start()-100) if match else 0
+                excerpts.append(text[offset:offset+page_budget])
+            result.update(discovery_url=source["url"], url=document_url,
+                snippet="\n".join(excerpts)[:1500] if status != "image_only_requires_review" else "",
+                verification="document_text_not_independent_fact_check",
+                document=dict(status=status, sha256=digest, pages=[n for n, _ in selected if n],
+                    table_alignment="not_verified", collection="automatic_official_fetch"))
+        except Exception as error:
+            result["document"] = dict(status="unavailable", error_type=type(error).__name__)
+            if source.get('expected_sha256'):
+                result['snippet'] = ''
+        result["document_receipts"] = self.receipts[start:]
+        return result
 
 
 class Finding(BaseModel):
@@ -94,6 +265,9 @@ def adaptive_query(profile, task, *, retry=False):
     payload["query"] = f"{profile.target.region} {year}년 {int(month)}월 {terms}"
     if retry and terms == task["search_terms"]:
         payload["query"] += " 원문 세부자료"
+    if retry and task["question_id"] == "economy":
+        parent = {"춘천시": "강원", "강남구": "서울"}[profile.target.region]
+        payload["query"] = f"{parent} {year}년 {int(month)}월 실물경제동향 소비 관광 보고서"
     return payload
 
 
@@ -106,7 +280,7 @@ def search_plan(profile):
     plans = []
     for key, terms, domains in (
         ("population", "주민등록 인구 현황 월별 통계", ["chuncheon.go.kr", "gangnam.go.kr", "mois.go.kr", "kosis.kr", "kostat.go.kr"]),
-        ("economy", "지역 경제 동향 소비 소매판매 보고서", ["chuncheon.go.kr", "gangnam.go.kr", "kostat.go.kr", "kosis.kr"]),
+        ("economy", "지역 경제 동향 소비 소매판매 보고서", ["chuncheon.go.kr", "gangnam.go.kr", "kostat.go.kr", "kosis.kr", "bok.or.kr", "gwto.or.kr"]),
         ("calendar", "공휴일 월력요항 행사 일정", ["chuncheon.go.kr", "gangnam.go.kr", "kasi.re.kr", "kma.go.kr"]),
     ):
         # 전국 공휴일은 지역명을 필수 검색어로 넣으면 누락될 수 있다.
@@ -157,17 +331,25 @@ def source_scope(source, profile, question_id):
                     ("현재페이지" in text and "다음" in text and "마지막" in text))
     detail_page = bool(path or parts.query) and not is_index and not listing_page
     national_calendar = question_id == "calendar" and any(word in text for word in ("공휴일", "월력요항"))
+    document_status = source.get("document", {}).get("status")
+    parent = {"춘천시": "강원", "강남구": "서울"}[profile.target.region]
+    wider = (document_status in ("pdf_text", "html_text") and parent in title and parent in text
+             and profile.target.region.removesuffix("시").removesuffix("구") not in title)
     reasons = []
     if not detail_page: reasons.append("일반 홈페이지여서 구체적 통계표·보고서가 아님")
     if listing_page: reasons.append("게시판 목록이므로 개별 통계표 본문을 확인해야 함")
     if not period_match: reasons.append("발췌에서 분석 기준월을 확인하지 못함")
-    if not (region_match or national_calendar): reasons.append("발췌에서 대상 지역을 확인하지 못함")
+    if not (region_match or national_calendar or wider): reasons.append("발췌에서 대상 지역을 확인하지 못함")
     if not topic_match: reasons.append("질문에 맞는 주제 표현을 확인하지 못함")
     if menu_topic_only: reasons.append("주제 단어가 메뉴에 있으나 페이지 제목은 해당 자료가 아님")
+    if document_status == "image_only_requires_review": reasons.append("이미지형 PDF여서 본문을 읽지 못함·별도 확인 필요")
+    if source.get('expected_sha256') and document_status == 'unavailable':
+        reasons.append('등록된 원문의 해시·본문 재확인 실패')
     return dict(status="reference_candidate" if not reasons else "discovery_only",
                 region_text_match=region_match, period_text_match=period_match,
                 topic_text_match=topic_match, detail_page=detail_page,
                 national_calendar=national_calendar, listing_page=listing_page, reasons=reasons,
+                geographic_scope="wider_region_context" if wider else "target_or_national_context",
                 limitation="문자열 검사 통과도 수치·통계 단위·인과관계의 사실 검증을 뜻하지 않음")
 
 
@@ -236,6 +418,8 @@ def validate_research_receipt(receipt, profile):
     if not 0 <= receipt["search_attempts"] <= 3 or not 0 <= receipt["gemini_attempts"] <= (2 if adaptive else 1):
         raise ValueError("research_call_limit")
     if adaptive:
+        if not 0 <= receipt.get("document_requests", 0) <= 4:
+            raise ValueError("document_request_limit")
         decision = ResearchDecision.model_validate(receipt["research_decision"])
         planned = {task.question_id for task in decision.tasks}
         if len(receipt["search_questions"]) != receipt["search_attempts"]:
@@ -310,6 +494,16 @@ def explain_bundle(bundle):
         for receipt in [r for r in receipts if r["analysis_id"] == cohort["analysis_id"] and r.get("provider") == "gemini"]:
             lines += [f"- 이번 집단의 Tavily 검색 시도: {receipt.get('search_attempts', 0)}회 / "
                       f"Gemini 검토 시도: {receipt.get('gemini_attempts', 0)}회", ""]
+            lines.append(f"- 공식 문서 GET 시도: {receipt.get('document_requests', 0)}회. 검색·모델 API 호출과 별도로 집계합니다.")
+            for source in receipt.get("sources", []):
+                document = source.get("document")
+                if not document:
+                    continue
+                label = {"pdf_text":"PDF 텍스트 추출", "html_text":"정적 HTML 본문 추출",
+                         "deferred":"등록 출처 우선 수집으로 본문 수집 보류·검색 발췌만 있음",
+                         "image_only_requires_review":"이미지형 PDF·본문 미확인", "unavailable":"본문 수집 실패·검색 발췌만 보존"}.get(document["status"], document["status"])
+                pages = ", ".join(map(str, document.get("pages", []))) or "해당 없음"
+                lines.append(f"- {source['id']}: {label} / PDF 페이지: {pages}. 표 행·열 대응은 미검증이며 광역 수치는 집단 수치가 아닙니다.")
             if receipt.get("research_mode") == "adaptive":
                 decision = receipt["research_decision"]
                 stop_labels = {"not_needed":"기존 자료·관측 상태에 따라 검색 생략",
@@ -333,7 +527,7 @@ def explain_bundle(bundle):
             for finding in accepted:
                 source = next(s for s in receipt["sources"] if s["id"] == finding["source_id"])
                 lines += [f"- 질문: {QUESTIONS[finding['question_id']]}",
-                          f"  - 검색 발췌에서 확인한 문장: {finding['quote']}",
+                          f"  - 제공된 검색·문서 발췌에서 확인한 문장: {finding['quote']}",
                           f"  - 모델의 관련성 해석(별도 사실 검증 전): {finding['relevance']}",
                           f"  - 출처: [{source['title']}]({source['url']})",
                           "  - 상태: 인용·최소 범위 검사를 통과한 참고 후보. 인과관계나 새 수치 지표로 반영하지 않음."]

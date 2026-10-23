@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api, pages, targetLabel } from "./domain.js";
 import useWelfare from "./useWelfare.js";
 import Dashboard from "./components/Dashboard.jsx";
+import Analysis from "./components/Analysis.jsx";
 import {
   AnalysisPanels,
   Filters,
@@ -183,7 +184,7 @@ export default function App() {
       </header>
       <main id="main" tabIndex={-1}>
         <section
-          hidden={["recommendations", "planning", "dashboard"].includes(page)}
+          hidden={["recommendations", "planning", "dashboard", "analysis"].includes(page)}
           aria-label={pages[page]}
         >
           <div className="page-heading">
@@ -204,6 +205,10 @@ export default function App() {
           />
         </div>
         <PlanningInbox active={page === "planning"} />
+        <Analysis active={page === 'analysis'} model={model} openRecommendations={(entry) => {
+          model.selectEntry(entry);
+          location.hash = '#recommendations';
+        }} />
         <section
           hidden={page !== "recommendations"}
           aria-labelledby="recommendation-title"
