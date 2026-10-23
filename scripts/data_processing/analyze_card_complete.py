@@ -4,7 +4,7 @@ from html import escape
 import pandas as pd
 import numpy as np
 from industry_classification import classify_industries, ALL_GROUPS
-from analyze_risk_features import heatmap
+from analyze_features import heatmap
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'data/processed/eda/card'

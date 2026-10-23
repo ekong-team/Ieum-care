@@ -45,12 +45,16 @@ Ieum-care/
 ### 프론트엔드 미리보기
 
 ```bash
+cd frontend
+npm ci
+npm run build
+cd ..
 python backend/server.py
 ```
 
 <http://127.0.0.1:5175> 접속 후 **복지자원 추천** 메뉴를 선택한다.
-실시간 모드는 Tavily 검색과 Gemini 판단을 사용한다. 프로젝트 루트 `.env`에 TAVILY_API_KEY, GEMINI_API_KEY, GEMINI_MODEL=gemini-3.5-flash-lite를 설정한다. 저장된 6개 자원 조회는 별도의 테스트 모드다. 현재 모집·개인 자격은 확인이 필요하며 실제 위험도 자동 수신·기획 Agent는 연결 전이다.
-검색과 모델은 각 1회 호출하며 무료 계정의 한도 초과 시 중단한다. 자동 테스트는 가짜 응답으로 검증하며 실제 추천 품질은 별도 확인해야 한다.
+화면은 React + Vite로 구성하며 Node.js 22.12 이상과 npm이 필요하다. Python 서버는 `frontend/dist` 빌드 결과를 제공한다. 개발용 Vite 실행은 [프론트엔드 안내](frontend/README.md)를 참고한다. 실시간 모드는 Tavily 검색과 Gemini 판단을 사용한다. 프로젝트 루트 `.env`에 TAVILY_API_KEY, GEMINI_API_KEY, GEMINI_MODEL=gemini-3.5-flash-lite를 설정한다. 화면의 저장 자료 테스트 모드와 예시 입력은 제거했다. 분석 결과를 직접 수신하여 1차 대상별로 추천하고 2차 대응 검토표를 제공한다. 현재 모집·개인 자격은 확인이 필요하다. 기획 요청은 검증 후 로컬 전달함에 저장하며 프로그램 기획 탭에서 확인한다. 실제 기획 Agent는 연결 대기 상태다.
+추천 요청당 검색 최대 2회·모델 1회를 호출하며 무료 계정의 한도 초과 시 중단한다. 자동 테스트는 가짜 응답으로 검증하며 실제 추천 품질은 별도 확인해야 한다.
 파일 구성과 화면 범위는 [프론트엔드 안내](frontend/README.md)를 참고한다.
 
 ### 데이터 정제

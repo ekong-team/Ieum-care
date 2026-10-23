@@ -8,7 +8,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 SCHEMA_VERSION = "welfare-0.3"
-RISK_SCHEMA_VERSION = "risk-input-0.1"
+RISK_SCHEMA_VERSION = "risk-input-0.2"
+LEGACY_RISK_SCHEMA_VERSION = "risk-input-0.1"
 RULES_VERSION = "support-review-0.2"
 CATALOG_PATH = Path(__file__).with_name("welfare_resources.json")
 PURPOSES = {
@@ -27,9 +28,9 @@ def validate_request(payload):
     if set(payload) - {"target", "risk_assessment", "confirmed_support_needs", "analysis_context"}:
         raise ValueError("지원하지 않는 요청 항목이 있습니다.")
     target = payload.get("target")
-    if not isinstance(target, dict) or set(target) not in ({"region", "age_group", "purpose"}, {"region", "age_group", "purpose", "sex"}):
-        raise ValueError("target에는 region, age_group, purpose가 필요합니다.")
-    if "sex" in target and target["sex"] not in ("all", "male", "female"):
+    if not isinstance(target, dict) or set(target) not in ({"region", "age_group", "purpose"}, {"region", "age_group", "sex", "purpose"}):
+        raise ValueError("target에는 region, age_group, purpose와 선택적 sex가 필요합니다.")
+    if target.get("sex", "all") not in ("all", "male", "female"):
         raise ValueError("sex는 all, male, female 중 하나여야 합니다.")
     if target["region"] not in ("춘천시", "강남구"):
         raise ValueError("현재 지원 지역은 춘천시·강남구입니다.")
@@ -56,10 +57,8 @@ def validate_analysis_context(payload, target):
     except ValueError:
         raise ValueError("분석 맥락의 형식 또는 원인 가설의 근거 참조가 올바르지 않습니다.") from None
     profile, risk = context.profile, payload.get("risk_assessment")
-    if profile.target.region != target["region"] or profile.target.age_group != target["age_group"]:
-        raise ValueError("분석 맥락과 추천 대상의 지역·연령대가 다릅니다.")
-    if "sex" in target and profile.target.sex != target["sex"]:
-        raise ValueError("분석 맥락과 추천 대상의 성별이 다릅니다.")
+    if (profile.target.region, profile.target.age_group, profile.target.sex) != (target["region"], target["age_group"], target.get("sex", "all")):
+        raise ValueError("분석 맥락과 추천 대상의 지역·연령·성별이 다릅니다.")
     if (profile.risk is None) != (risk is None):
         raise ValueError("분석 맥락과 위험도 입력의 유무가 다릅니다.")
     if risk is not None and (profile.risk.status != risk["status"] or profile.risk.level != risk["level"]
@@ -74,17 +73,19 @@ def validate_risk(risk, target):
     """팀원과 합의할 초안 계약. 단계 계산 없이 전달값의 형식·집단 일치만 검증한다."""
     if risk is None:
         return
-    if isinstance(risk, dict) and risk.get("schema_version") == "risk-input-0.2":
-        from ai.analysis_agent.agent import WelfareRequest02
-        WelfareRequest02.model_validate({"target": target, "risk_assessment": risk})
-        return
-    if "sex" in target:
-        raise ValueError("성별 포함 위험도는 risk-input-0.2로 전달해야 합니다.")
     keys = {"schema_version", "assessment_id", "region", "age_group", "period", "status", "level", "signals", "limitations", "model_version", "is_example"}
+    if isinstance(risk, dict) and risk.get("schema_version") == RISK_SCHEMA_VERSION:
+        keys.add("sex")
     if not isinstance(risk, dict) or set(risk) != keys:
         raise ValueError("위험도 입력 필드가 초안 계약과 일치하지 않습니다.")
-    if risk["schema_version"] != RISK_SCHEMA_VERSION:
+    if risk["schema_version"] not in (RISK_SCHEMA_VERSION, LEGACY_RISK_SCHEMA_VERSION):
         raise ValueError("지원하지 않는 위험도 입력 버전입니다.")
+    if risk["schema_version"] == RISK_SCHEMA_VERSION:
+        # 생산자 계약을 그대로 검사한다. 성별을 제거해 합산으로 변환하지 않는다.
+        from ai.analysis_agent.agent import WelfareRequest02
+        WelfareRequest02.model_validate({"target": target, "risk_assessment": risk, "confirmed_support_needs": []})
+    elif target.get("sex", "all") != "all":
+        raise ValueError("기존 risk-input-0.1은 남녀 합산 조회만 지원합니다. 성별 분석은 0.2를 사용하세요.")
     if risk["region"] != target["region"] or type(risk["age_group"]) is not int or risk["age_group"] != target["age_group"]:
         raise ValueError("위험도 결과와 추천 대상의 지역·연령대가 다릅니다.")
     if not isinstance(risk["period"], str) or not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", risk["period"]):

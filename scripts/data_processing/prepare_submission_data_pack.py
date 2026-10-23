@@ -21,6 +21,49 @@ def digest(path):
     return h.hexdigest()
 
 
+def build_analysis_context():
+    """분석에 필요한 인구·달력 배경만 생성한다. 제출 ZIP·문서는 만들지 않는다."""
+    DEST.mkdir(parents=True, exist_ok=True)
+    # This is a human transcription of calendar date facts, not a copied website/API response.
+    facts = dict(source_kind='human_transcribed_calendar_date_facts',
+                 source_url='https://www.kasi.re.kr/kor/publication/post/newsMaterial/30071',
+                 crosscheck_url='https://www.korea.kr/multi/visualNewsView.do?newsId=148936865',
+                 scope='2025-07-01 through 2025-12-31; Saturdays and Sundays computed using Gregorian calendar',
+                 dates={'2025-08-15': '광복절', '2025-10-03': '개천절', '2025-10-05': '추석연휴',
+                        '2025-10-06': '추석', '2025-10-07': '추석연휴', '2025-10-08': '대체공휴일',
+                        '2025-10-09': '한글날', '2025-12-25': '기독탄신일'})
+    raw_calendar = DEST / 'calendar_date_facts.json'
+    raw_calendar.write_text(json.dumps(facts, ensure_ascii=False, indent=2), encoding='utf-8')
+    calendars = []
+    import calendar
+    for month in range(7, 13):
+        days = [date(2025, month, d) for d in range(1, calendar.monthrange(2025, month)[1]+1)]
+        weekends = {d for d in days if d.weekday() >= 5}
+        holidays = {d for d in days if d.isoformat() in facts['dates']}
+        calendars.append(dict(month=f'2025{month:02}', days=len(days), weekend_days=len(weekends),
+                              named_holiday_days=len(holidays), overlap=len(weekends & holidays),
+                              weekend_or_holiday_days=len(weekends | holidays),
+                              weekday_nonholiday_days=len(days)-len(weekends | holidays)))
+    (DEST / 'calendar_monthly.json').write_text(json.dumps(calendars, ensure_ascii=False, indent=2), encoding='utf-8')
+    joined = json.loads((ROOT / 'data/processed/external_context_20261015/population_activity_review.json').read_text(encoding='utf-8'))
+    for record in joined['records']:
+        record['calendar_context'] = next(c for c in calendars if c['month'] == record['analysis_id'][:6])
+    joined['schema_version'] = 'submission-review-context-v1'
+    joined['release_status'] = 'draft_pending_team_review'
+    joined['user_decisions'] = dict(confirmed_on='2026-10-15',
+        result_label='활동 위축 검토 단계', interpretation='집단 활동 변화의 참고 근거; 개인 고립 확정 아님',
+        included_context=['resident_population', 'calendar'], excluded_context=['weather', 'CPI'],
+        context_use='배경정보만 병기; 점수 가중치 미추가',
+        sensitivity='기존 시범 기준과 조건 변경 결과를 함께 제시',
+        team_consensus='not_recorded')
+    joined['excluded_context'] = ['weather', 'CPI']
+    (DEST / 'analysis_with_population_calendar.json').write_text(json.dumps(joined, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
+    original = json.loads((ROOT / 'data/processed/agent_activity_evidence.json').read_text(encoding='utf-8'))
+    assert [r['analysis_evidence'] for r in joined['records']] == original['records']
+    assert len(joined['records']) == len({r['analysis_id'] for r in joined['records']}) == 72
+    return joined, raw_calendar
+
+
 def main():
     # Versioned review folder; never clear or recursively overwrite user folders.
     DEST.mkdir(parents=True, exist_ok=True)
@@ -61,43 +104,7 @@ def main():
     for path in sorted((ROOT / 'data/external/sgis').glob('*.zip')):
         dependencies.append(dict(path=path.relative_to(ROOT).as_posix(), bytes=path.stat().st_size,
                                  sha256=digest(path), kind='conditional_spatial_validation_dependency'))
-    # This is a human transcription of calendar date facts, not a copied website/API response.
-    facts = dict(source_kind='human_transcribed_calendar_date_facts',
-                 source_url='https://www.kasi.re.kr/kor/publication/post/newsMaterial/30071',
-                 crosscheck_url='https://www.korea.kr/multi/visualNewsView.do?newsId=148936865',
-                 scope='2025-07-01 through 2025-12-31; Saturdays and Sundays computed using Gregorian calendar',
-                 dates={'2025-08-15': '광복절', '2025-10-03': '개천절', '2025-10-05': '추석연휴',
-                        '2025-10-06': '추석', '2025-10-07': '추석연휴', '2025-10-08': '대체공휴일',
-                        '2025-10-09': '한글날', '2025-12-25': '기독탄신일'})
-    raw_calendar = DEST / 'calendar_date_facts.json'
-    raw_calendar.write_text(json.dumps(facts, ensure_ascii=False, indent=2), encoding='utf-8')
-    calendars = []
-    import calendar
-    for month in range(7, 13):
-        days = [date(2025, month, d) for d in range(1, calendar.monthrange(2025, month)[1]+1)]
-        weekends = {d for d in days if d.weekday() >= 5}
-        holidays = {d for d in days if d.isoformat() in facts['dates']}
-        calendars.append(dict(month=f'2025{month:02}', days=len(days), weekend_days=len(weekends),
-                              named_holiday_days=len(holidays), overlap=len(weekends & holidays),
-                              weekend_or_holiday_days=len(weekends | holidays),
-                              weekday_nonholiday_days=len(days)-len(weekends | holidays)))
-    (DEST / 'calendar_monthly.json').write_text(json.dumps(calendars, ensure_ascii=False, indent=2), encoding='utf-8')
-    joined = json.loads((ROOT / 'data/processed/external_context_20261015/population_activity_review.json').read_text(encoding='utf-8'))
-    for record in joined['records']:
-        record['calendar_context'] = next(c for c in calendars if c['month'] == record['analysis_id'][:6])
-    joined['schema_version'] = 'submission-review-context-v1'
-    joined['release_status'] = 'draft_pending_team_review'
-    joined['user_decisions'] = dict(confirmed_on='2026-10-15',
-        result_label='활동 위축 검토 단계', interpretation='집단 활동 변화의 참고 근거; 개인 고립 확정 아님',
-        included_context=['resident_population', 'calendar'], excluded_context=['weather', 'CPI'],
-        context_use='배경정보만 병기; 점수 가중치 미추가',
-        sensitivity='기존 시범 기준과 조건 변경 결과를 함께 제시',
-        team_consensus='not_recorded')
-    joined['excluded_context'] = ['weather', 'CPI']
-    (DEST / 'analysis_with_population_calendar.json').write_text(json.dumps(joined, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
-    original = json.loads((ROOT / 'data/processed/agent_activity_evidence.json').read_text(encoding='utf-8'))
-    assert [r['analysis_evidence'] for r in joined['records']] == original['records']
-    assert len(joined['records']) == len({r['analysis_id'] for r in joined['records']}) == 72
+    joined, raw_calendar = build_analysis_context()
     assert len(dependencies) >= 20
     decisions = '''# 데이터 제출 전 검토·결정표
 
@@ -194,4 +201,12 @@ SGIS는 조건부 공간 검증용이며 제출·재배포 범위는 신청 시 
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--context-only', action='store_true', help='분석용 인구·달력 JSON만 생성')
+    args = parser.parse_args()
+    if args.context_only:
+        context, _ = build_analysis_context()
+        print(json.dumps({'context_records': len(context['records']), 'output': str(DEST / 'analysis_with_population_calendar.json')}, ensure_ascii=False))
+    else:
+        main()

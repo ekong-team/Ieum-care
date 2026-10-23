@@ -203,7 +203,7 @@ def search_evidence(response, *, allow_empty=False):
 def search_resources(target, config, search_call):
     """지역 검색을 먼저 하고 웹 페이지가 부족할 때만 중앙 공식 자료를 1회 보완한다."""
     local_domain = "chuncheon.go.kr" if target["region"] == "춘천시" else "gangnam.go.kr"
-    age = {10: "아동 청소년", 20: "20대 청년", 30: "30대", 40: "40대 중장년", 50: "50대 중장년", 60: "60대 이상 어르신"}[target["age_group"]]
+    age = {10: "10대 청소년", 20: "20대 청년", 30: "30대", 40: "40대 중장년", 50: "50대 중장년", 60: "60대 이상 어르신"}[target["age_group"]]
     purpose = {"all": "복지서비스", "connection": "사회참여 모임", "daily": "일상돌봄",
                "wellbeing": "심리상담", "economic": "생활비 지원", "other": "복지 안내"}[target["purpose"]]
     plan = [("local", f"{target['region']} {age} {purpose} 신청", [local_domain]),
@@ -300,6 +300,9 @@ analysis_context가 있으면 profile.evidence의 id·value·unit·period·sourc
 ratio와 percent를 혼동하지 말고 수치·출처를 새로 만들지 마라. causes는 확인이 필요한 원인 가설이며 진단이 아니다.
 가설의 evidence_ids로 실제 근거를 추적하라. 판정이 없거나 held/partial이면 원인을 확정하거나 위험 단계를 재해석하지 마라.
 성별은 선택 집단의 맥락일 뿐 개인의 신청 자격을 보장하지 않는다.
+target.sex와 risk_assessment.sex를 보존하여 선택 집단을 해석하라. all은 남녀 합산이다.
+age_group=10은 10~19세이며 10세 미만 아동은 포함하지 않는다.
+성별만으로 욕구·질환·경제 상태를 추정하지 마라. 성별 제한 자격은 공식 근거에 따라 확인하며 미확인 조건은 확인 사항에 남겨라.
 중앙 자료는 해당 지역의 시행·모집을 보증하지 않는다. 지역 제공 여부가 미확인이면 이를 명시하라.
 source_kind와 detail_hint는 자료 형식·검색 발췌문의 단서이며 내용 정확도·최신성·적합성 점수가 아니다.
 추천 이유에는 입력의 어떤 근거와 연결되는지, 아직 무엇을 모르는지 설명하라. 확인된 필요는 중요한 참고 정보이며
