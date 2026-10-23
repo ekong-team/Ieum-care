@@ -49,6 +49,9 @@ class LiveAgentTests(unittest.TestCase):
         self.config_patch = patch('ai.welfare_agent.live_agent.configuration', return_value=self.config)
         self.config_patch.start()
         self.addCleanup(self.config_patch.stop)
+        self.page_patch = patch('ai.welfare_agent.official_pages.fetch_official_html', side_effect=ValueError('offline fixture'))
+        self.page_patch.start()
+        self.addCleanup(self.page_patch.stop)
         self.search = {'results': [{'url': URL, 'title': '가상 검색 출처', 'content': '가상 검색 근거 · 노인 지원대상과 신청방법 안내'}, {'url': URL + '-second', 'title': '다른 지역 공식 안내', 'content': '추가 검색 근거 · 어르신 이용대상과 문의 안내'}], 'usage': {'credits': 1}}
         self.search = with_fixture_facts(self.search)
 
@@ -145,6 +148,41 @@ class LiveAgentTests(unittest.TestCase):
         self.assertEqual([s['stage'] for s in stages], ['local', 'national'])
         self.assertEqual(sum(s['credits'] for s in stages), 2)
         self.assertEqual(evidence[0]['url'], 'https://www.bokjiro.go.kr/service')
+
+    def test_special_target_hints_do_not_stop_national_search(self):
+        search = Mock(side_effect=[{'results': [dict(url=URL, content='2026년 성인 장애인 동아리 지원대상 신청방법 안내'),
+                                               dict(url=URL+'-2', content='2026년 시민 고등학교 졸업예정자 대상: 신청방법 안내')]},
+                                  {'results': [dict(url='https://www.mohw.go.kr/common', content='성인 지원 안내')]}])
+        _, stages, _ = search_resources(dict(region='춘천시', age_group=30, purpose='all'), self.config, search)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(stages[0]['detail_hint_count'], 2)
+        self.assertEqual(stages[0]['general_guidance_hint_count'], 0)
+
+    def test_repeated_same_guidance_cannot_count_twice_for_search_sufficiency(self):
+        text = '2026년 노인 지원대상과 신청방법 안내'
+        search = Mock(side_effect=[{'results': [dict(url=URL, content=text), dict(url=URL+'-same', content=text)]},
+                                  {'results': []}])
+        _, stages, _ = search_resources(self.payload['target'], self.config, search)
+        self.assertEqual(stages[0]['general_guidance_hint_count'], 1)
+        self.assertEqual(search.call_count, 2)
+
+    def test_official_body_conditions_reach_model_and_grounding_with_two_read_limit(self):
+        description = '성인 교류 프로그램을 지원합니다.'
+        eligibility = '만 19세 이상 시민이며 별도 소득 기준 확인이 필요합니다.'
+        html = ('<html><body>' + description + eligibility + '안내 내용. ' * 30 + '</body></html>').encode()
+        decision = example_decision()
+        decision['resources'][0].update(description=description, description_evidence=description,
+            eligibility=eligibility, eligibility_evidence=eligibility)
+        call = Mock(return_value={'candidates':[message(json.dumps(decision))]})
+        getter = Mock(return_value=(html, 'text/html; charset=utf-8'))
+        result = recommend_live(self.payload, call=call, search_call=Mock(return_value=self.search), document_getter=getter)
+        self.assertEqual(result['total'], 1)
+        self.assertEqual(getter.call_count, 2)
+        model_input = json.loads(call.call_args.args[0]['contents'][0]['parts'][0]['text'])
+        self.assertIn(eligibility, model_input['search_evidence'][0]['content'])
+        source = result['diagnostics']['sources'][0]
+        self.assertEqual(source['document']['status'], 'html_excerpt')
+        self.assertIn('가상 검색 근거', source['search_snippet'])
 
     def test_queries_use_current_year_and_do_not_require_literal_thirties(self):
         target = dict(region='춘천시', age_group=30, purpose='all')

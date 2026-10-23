@@ -230,13 +230,16 @@ class WelfareCallAccountingTests(unittest.TestCase):
         patcher = patch("ai.welfare_agent.live_agent.configuration", return_value=config)
         patcher.start()
         self.addCleanup(patcher.stop)
+        pages = patch('ai.welfare_agent.official_pages.fetch_official_html', side_effect=ValueError('offline fixture'))
+        pages.start()
+        self.addCleanup(pages.stop)
 
     def response(self, data):
         return io.BytesIO(json.dumps(data).encode())
 
     def local(self, count=2):
         return {"results": [{"url": f"https://www.chuncheon.go.kr/service/{i}",
-                             "content": "청년 지원대상과 신청방법 안내"} for i in range(count)], "usage": {"credits": 1}}
+                             "content": f"청년 지원대상과 신청방법 안내 {i}"} for i in range(count)], "usage": {"credits": 1}}
 
     def judgment(self):
         return {"candidates": [{"finishReason": "STOP", "content": {"parts": [
@@ -251,8 +254,8 @@ class WelfareCallAccountingTests(unittest.TestCase):
             result = recommend_existing(second, self.profile)
         self.assertEqual(failure.status, "unavailable")
         self.assertEqual(result.status, "available")
-        self.assertEqual(dict(first.calls), {"tavily": 1, "gemini": 1})
-        self.assertEqual(dict(second.calls), {"gemini": 1})
+        self.assertEqual(dict(first.calls), {"tavily": 1, "official_page": 2, "gemini": 1})
+        self.assertEqual(dict(second.calls), {"official_page": 2, "gemini": 1})
         self.assertEqual(send.call_count, 3)
         self.assertTrue(result.recommendation["search_cache_hit"])
 
@@ -263,7 +266,7 @@ class WelfareCallAccountingTests(unittest.TestCase):
                    self.response(national), HTTPError("https://test", 429, "limit", {}, None)]):
             result = recommend_existing(ctx, self.profile)
         self.assertEqual(result.status, "unavailable")
-        self.assertEqual(dict(ctx.calls), {"tavily": 2, "gemini": 1})
+        self.assertEqual(dict(ctx.calls), {"tavily": 2, "official_page": 2, "gemini": 1})
 
     def test_no_key_causes_no_external_attempt(self):
         ctx = NodeContext("run", "live")

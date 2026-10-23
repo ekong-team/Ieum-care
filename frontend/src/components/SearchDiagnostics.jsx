@@ -34,17 +34,19 @@ export default function SearchDiagnostics({ result }) {
     {(result.search_stages || []).map((stage, index) => <p key={index}>
       {stage.stage === "local" ? "지역 검색" : "중앙 보완 검색"}: {stage.query}
       <br />검색일 {stage.searched_at} · 출처 {stage.source_count}개 · 상세 단서 {stage.detail_hint_count ?? "미기록"}개
+      {stage.general_guidance_hint_count !== undefined && ` · 일반 안내 단서 ${stage.general_guidance_hint_count}개`}
       {stage.cache_hit ? " · 임시 검색 캐시 사용" : ""}
     </p>)}
     {sources.map((source) => <article className="search-review-source" key={source.url}>
       <h4>{officialLink(source.url) ? <a href={source.url} target="_blank" rel="noreferrer">{source.title || "공식 출처 열기"} ↗</a> : "출처 링크 확인 필요"}</h4>
       <p className="muted">{kinds[source.source_kind] || "자료 종류 미확인"} · {recency[source.recency_hint] || "연도 단서 미기록"} · 검색일 {source.searched_at}</p>
+      {source.document && <p className="muted">공식 본문: {({ html_excerpt: "HTML 본문 일부 읽음", unavailable: "읽기 실패 · 검색 발췌만 사용", not_fetched: "미수집 · 검색 발췌만 사용" })[source.document.status] || "상태 확인 필요"}{source.document.fetched_at ? ` · 수집일 ${source.document.fetched_at}` : ""}{source.document.truncated ? " · 길이 제한으로 일부만 제공" : ""}</p>}
       <p><strong>{statuses[source.model_review?.status] || "AI 설명 기록 없음"}</strong></p>
       {source.model_review?.reason && <p>{source.model_review.reason}</p>}
       {source.model_review?.evidence_quote && <blockquote className="source-evidence">{source.model_review.evidence_quote}</blockquote>}
       {source.model_review?.quote_status === "not_provided" && <p className="muted">이유에 대한 원문 인용 없음 · 설명의 사실성은 추가 확인이 필요합니다.</p>}
       {(source.server_exclusions || []).map((item, index) => <p key={index}>서버 제외: {item.name} · {exclusions[item.reason] || "검증 조건 미충족"}</p>)}
-      <details><summary>검색 발췌문 보기</summary><p className="search-excerpt">{source.content}</p></details>
+      <details><summary>검색·본문 근거 보기</summary><p className="search-excerpt">{source.content}</p></details>
     </article>)}
   </details>;
 }

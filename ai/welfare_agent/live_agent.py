@@ -16,6 +16,7 @@ from urllib.parse import unquote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from ai.welfare_agent.recommender import PURPOSES, age_overlap, validate_request
+from ai.welfare_agent.official_pages import enrich_evidence
 
 ROOT = Path(__file__).resolve().parents[2]
 FREE_MODELS = ("gemini-3.5-flash-lite",)
@@ -266,7 +267,13 @@ def search_resources(target, config, search_call):
         stages[-1]["detail_hint_count"] = detailed
         stages[-1]['older_year_source_count'] = sum(item['recency_hint'] == 'older_years_only' for item in found)
         stages[-1]['background_source_count'] = sum(item['source_kind'] == 'background_news' for item in found)
-        if stage == "local" and detailed >= LOCAL_PAGE_TARGET:
+        # 특별한 가구·단체·학적 조건이 붙은 자료만으로 일반 집단의 검색을 끝내지 않는다.
+        restricted = ('장애', '한부모', '수급', '신입생', '졸업예정', '동아리', '초등', '고등학교')
+        sufficient = {hashlib.sha256(re.sub(r'\s+', '', item['content']).encode()).hexdigest()
+                      for item in found if item['detail_hint'] and item['recency_hint'] != 'older_years_only'
+                      and not any(word in re.sub(r'\s+', '', item['title'] + item['content']) for word in restricted)}
+        stages[-1]['general_guidance_hint_count'] = len(sufficient)
+        if stage == "local" and len(sufficient) >= LOCAL_PAGE_TARGET:
             break
     if not evidence:
         raise AgentError("지역·중앙 공식 검색에서 근거를 확보하지 못했습니다. 검색은 최대 2회에서 중단했습니다.")
@@ -354,6 +361,11 @@ analysis_context가 있으면 profile.evidence의 id·value·unit·period·sourc
 ratio와 percent를 혼동하지 말고 수치·출처를 새로 만들지 마라. causes는 확인이 필요한 원인 가설이며 진단이 아니다.
 가설의 evidence_ids로 실제 근거를 추적하라. 판정이 없거나 held/partial이면 원인을 확정하거나 위험 단계를 재해석하지 마라.
 성별은 선택 집단의 맥락일 뿐 개인의 신청 자격을 보장하지 않는다.
+장애·소득·가구·학적 상태가 입력에 없으면 '자격 미확인'이며 '대상 불일치'로 확정하지 마라.
+졸업예정자·대학생이라는 이유만으로 30대와 연령 불일치라고 단정하지 마라. 명시된 연령 범위를 대조하라.
+분석 결과가 없으면 소비·이동 감소가 관측되었다고 서술하지 마라. 선택 지역·연령·성별 조건만 받은 것이다.
+document.status=html_excerpt이면 공식 HTML에서 제한된 본문을 추가로 읽은 자료다.
+검색 발췌와 본문 발췌를 구분하고, 둘 다 원문 전체·현재 운영·개인 자격 검증을 뜻하지 않음을 보존하라.
 target.sex와 risk_assessment.sex를 보존하여 선택 집단을 해석하라. all은 남녀 합산이다.
 age_group=10은 10~19세이며 10세 미만 아동은 포함하지 않는다.
 성별만으로 욕구·질환·경제 상태를 추정하지 마라. 성별 제한 자격은 공식 근거에 따라 확인하며 미확인 조건은 확인 사항에 남겨라.
@@ -409,7 +421,7 @@ evidence_quote에는 같은 출처에서 이유를 뒷받침하는 원문을 240
 적절한 검색 근거가 없으면 resources를 비우고 summary에 한계를 설명하라. 답변은 한국어로 작성하라."""
 
 
-def recommend_live(payload, *, call=None, search_call=None, on_external_call=None):
+def recommend_live(payload, *, call=None, search_call=None, document_getter=None, on_external_call=None):
     target = validate_request(payload)
     config = configuration()
     if not config["key"].strip():
@@ -427,6 +439,7 @@ def recommend_live(payload, *, call=None, search_call=None, on_external_call=Non
         raise AgentError("GEMINI_MODEL을 gemini-3.5-flash-lite로 설정해주세요.", 503)
     # 검색에는 공개 조건만, 현재 분석 결과는 Gemini 판단에만 전달한다.
     evidence, stages, source_dates = search_resources(target, config, search_call)
+    evidence = enrich_evidence(evidence, official_url, getter=document_getter, on_external_call=on_external_call)
     sources = {item["url"] for item in evidence}
     judged = call({"systemInstruction": {"parts": [{"text": JUDGE_INSTRUCTIONS}]},
                    "contents": [{"role": "user", "parts": [{"text": json.dumps({"context": context, "search_evidence": evidence, "source_urls": sorted(sources)}, ensure_ascii=False)}]}],
@@ -610,7 +623,9 @@ def checked_result(decision, payload, sources, today, model, evidence):
             excluded += 1
             continue
         seen.add(identity)
-        year_info = reference_year_info(resource, evidence_by_url.get(url, {}), today)
+        source_evidence = evidence_by_url.get(url, {})
+        year_info = reference_year_info(resource, source_evidence, today)
+        document = source_evidence.get('document', {'status': 'not_fetched'})
         item = {key: reader_text(value) if isinstance(value, str) else value
                 for key, value in resource.items()
                 if key not in ("source_url", "source_title", "reference_year", "reference_year_evidence", "reference_year_kind",
@@ -622,7 +637,10 @@ def checked_result(decision, payload, sources, today, model, evidence):
                             "page_updated_at": None, **year_info,
                             "description_evidence": resource['description_evidence'],
                             "eligibility_evidence": resource['eligibility_evidence'],
-                            "review_note": "공식 URL과 검색 발췌문을 대조한 결과입니다. 원문 전체·자료 연도의 의미·현재 모집 여부는 추가 확인이 필요합니다."},
+                            'document': deepcopy(document),
+                            "review_note": ("검색 발췌와 공식 HTML 본문 일부를 대조했습니다. 원문 전체·자료 연도의 의미·현재 모집 여부는 추가 확인이 필요합니다."
+                                            if document['status'] == 'html_excerpt' else
+                                            "공식 URL과 검색 발췌문을 대조한 결과입니다. 원문 전체·자료 연도의 의미·현재 모집 여부는 추가 확인이 필요합니다.")},
                     application_url=None, age_match=overlap, eligibility_status="needs_confirmation", support_basis="llm_analysis_match",
                     match_reasons=[reader_text(resource["check"])])
         matches.append(item)
