@@ -1,0 +1,886 @@
+{
+ "note": "2026-10-23 실제 Gemini 호출 결과 (tests/fixtures/target_profile_example.json 입력). 근거 검증 오탐 방지 회귀용.",
+ "runs": {
+  "run1": [
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-01",
+    "source": "generated",
+    "revision": 0,
+    "title": "춘천시 20대 생활 활력 회복을 위한 오프라인 소모임형 프로그램",
+    "one_liner": "부담 없이 참여할 수 있는 소규모 오프라인 모임을 통해 일상 속 활력을 되찾고 자연스럽게 교류하는 프로그램",
+    "format": "offline_group",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대 대상 분석에서 외식과 문화, 운동 등 사회활동 관련 소비 건수가 전월 대비 -8.3% 감소하였고 연령 유동량 또한 -4.1% 줄어드는 등 생활 전반이 위축되는 신호가 관측되었습니다. 기존 자원은 주로 안부 확인이나 개별 상담 중심이어서, 일상에서 가볍게 외출하여 관계를 넓힐 수 있는 오프라인 소모임 형태의 예방 프로그램이 부족한 상황입니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [
+      "C3_overall_withdrawal"
+     ],
+     "differs_from_existing": "기존 자원은 일상돌봄이나 고독사 예방 등 상담과 돌봄 위주이지만, 본 프로그램은 자발적인 외출과 소규모 취미 공유를 통해 생활 전반의 위축을 완화하는 데 초점을 둡니다."
+    },
+    "activities": [
+     {
+      "name": "취미 공유 오프라인 소모임",
+      "description": "가벼운 산책이나 독서 등 소소한 활동을 함께하며 대화를 나누는 모임",
+      "frequency": "주 1회",
+      "time_slot": "평일 저녁",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 4
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시 청년센터(확인 필요)"
+     ],
+     "linked_existing_resources": []
+    },
+    "recruitment": [
+     "온라인 홍보 폼을 통한 자율 신청",
+     "지역 커뮤니티 안내"
+    ],
+    "budget_items": [
+     {
+      "item": "모임 공간 대여료",
+      "unit": "회",
+      "quantity": 4.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "외식 및 문화 업종 소비 건수 변화율",
+      "definition": "프로그램 참여 전후 참여자 집단의 지역 내 소비 건수 추이 측정",
+      "data_source": "카드 소비 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "초기 참여율 저조",
+      "mitigation": "부담 없는 활동 내용으로 사전 안내 강화"
+     }
+    ],
+    "assumptions": [
+     "입력된 데이터는 예시 분석 결과이며 실제 개인의 고립을 단정하지 않습니다.",
+     "소비 및 유동량 감소의 원인이 계절적 요인인지 추가 확인이 필요합니다."
+    ],
+    "status": "draft_needs_review"
+   },
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-02",
+    "source": "generated",
+    "revision": 0,
+    "title": "온라인에서 오프라인으로 이어지는 단계형 소통 프로그램",
+    "one_liner": "온라인 커뮤니티에서 가볍게 시작해 오프라인 활동까지 자연스럽게 연결되는 단계형 프로그램",
+    "format": "hybrid",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대의 소비 건수가 전월 대비 -8.3% 감소하고 유동량이 -4.1% 줄어드는 등 외출과 이동이 줄어든 상황에서, 곧바로 대면 모임에 참여하기 어려운 대상층을 위해 온라인에서 소통을 시작하여 점진적으로 오프라인 참여를 유도하는 단계별 접근이 필요합니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [
+      "C3_overall_withdrawal"
+     ],
+     "differs_from_existing": "기존 자원은 대면 상담이나 기관 방문 중심이지만, 본 프로그램은 비대면 소통으로 시작해 오프라인으로 진입하는 단계를 도입하여 참여 장벽을 낮췄습니다."
+    },
+    "activities": [
+     {
+      "name": "온라인 안부 및 관심사 공유",
+      "description": "온라인 플랫폼에서 가벼운 일상과 관심사를 나누는 활동",
+      "frequency": "주 2회",
+      "time_slot": "상시",
+      "format": "online"
+     },
+     {
+      "name": "오프라인 정기 만남",
+      "description": "온라인에서 교류한 이들이 모여 함께 식사나 가벼운 활동을 하는 만남",
+      "frequency": "월 1회",
+      "time_slot": "주말 오후",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 8
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시 자원봉사센터(확인 필요)"
+     ],
+     "linked_existing_resources": []
+    },
+    "recruitment": [
+     "모바일 앱 및 SNS 채널 홍보",
+     "홍보 포스터 부착"
+    ],
+    "budget_items": [
+     {
+      "item": "온라인 플랫폼 운영 지원",
+      "unit": "월",
+      "quantity": 1.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "연령 유동량 변화 추이",
+      "definition": "참여자 대상 위치 데이터를 통한 이동량 변화 측정",
+      "data_source": "통신 유동량 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "온라인에서 오프라인으로의 전환율 저조",
+      "mitigation": "참여를 독려하는 소정의 소통 매개체 제공"
+     }
+    ],
+    "assumptions": [
+     "제공된 신호는 예시 자료이며 실제 대상자의 상태를 확정하는 지표가 아닙니다.",
+     "온라인 참여 수단에 대한 접근성을 사전에 점검해야 합니다."
+    ],
+    "status": "draft_needs_review"
+   },
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-03",
+    "source": "generated",
+    "revision": 0,
+    "title": "기존 자원 연계형 춘천시 청년 일상 활력 지원 사업",
+    "one_liner": "기존 복지 및 돌봄 자원과 연계하여 생활 위축 신호가 있는 청년에게 맞춤형 일상 지원을 제공하는 프로그램",
+    "format": "linked",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대의 소비와 이동량이 각각 전월 대비 -8.3%, -4.1% 감소하는 등 생활 전반의 위축이 관측되는 가운데, 기존의 일상돌봄서비스와 고독사 예방 사업 등의 자원을 상호 연계하여 촘촘한 지원망을 구성할 필요가 있습니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [
+      "C3_overall_withdrawal"
+     ],
+     "differs_from_existing": "기존 자원 개별 운영 방식에서 벗어나 여러 자원을 유기적으로 묶어 통합 안내하고 연계하는 점에서 차별화됩니다."
+    },
+    "activities": [
+     {
+      "name": "맞춤형 자원 안내 및 상담",
+      "description": "필요한 기존 지원 제도를 안내하고 신청을 돕는 상담 활동",
+      "frequency": "수시",
+      "time_slot": "주중 주간",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 4
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시청 복지정책과(확인 필요)"
+     ],
+     "linked_existing_resources": [
+      "cc-daily-care",
+      "cc-loneliness-prevention"
+     ]
+    },
+    "recruitment": [
+     "행정복지센터 방문 안내",
+     "온라인 복지 포털 홍보"
+    ],
+    "budget_items": [
+     {
+      "item": "홍보 리플렛 제작",
+      "unit": "부",
+      "quantity": 500.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "기존 자원 연계 건수",
+      "definition": "프로그램을 통해 기존 일상돌봄 및 예방 사업으로 연결된 건수",
+      "data_source": "행정 기록",
+      "measurable_by_data": false
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "기존 자원의 예산 및 정원 마감",
+      "mitigation": "사전에 담당 부서와 연계 가능 정원 협의"
+     }
+    ],
+    "assumptions": [
+     "본 기획안은 검토용 초안이며 확정된 사업 계획이 아닙니다.",
+     "기존 자원의 운영 일정과 선정 기준은 변동될 수 있습니다."
+    ],
+    "status": "draft_needs_review"
+   }
+  ],
+  "run2": [
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-01",
+    "source": "generated",
+    "revision": 0,
+    "title": "춘천시 20대 오프라인 소모임형 활력 증진 프로그램",
+    "one_liner": "오프라인 소모임을 통해 일상적인 외출과 교류를 늘리는 프로그램",
+    "format": "offline_group",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대 집단을 대상으로 한 2025-12 기준 사회활동 관련 소비 건수 변화 수치는 -0.083이며, 연령 유동량 변화 수치는 -0.041로 확인되어 생활 전반의 위축 경향이 나타나고 있습니다. 기존 자원인 일상돌봄서비스나 고독사 예방 사업은 주로 기관 상담 및 연계 중심으로 운영되고 있어, 지역 내 20대가 가볍게 참여하여 일상 활력을 회복할 수 있는 오프라인 소모임 형태의 자원이 부족합니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [],
+     "differs_from_existing": "기존 자원은 기관 상담과 수혜자 연계 위주이지만, 본 프로그램은 공백이 확인된 원인에 맞춰 20대가 직접 모여 소통하는 오프라인 활동을 제공합니다."
+    },
+    "activities": [
+     {
+      "name": "주말 가벼운 산책 및 문화 활동",
+      "description": "지역 내 공원 산책 및 문화 공간 방문을 통한 외출 유도",
+      "frequency": "주 1회",
+      "time_slot": "토요일 오전 10시부터 12시까지",
+      "format": "offline"
+     },
+     {
+      "name": "소그룹 취향 공유 모임",
+      "description": "관심사별로 모여 대화를 나누는 소그룹 활동",
+      "frequency": "주 1회",
+      "time_slot": "수요일 오후 7시부터 9시까지",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 8
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시청 청년담당 부서 (확인 필요)",
+      "지역 청년 센터 (확인 필요)"
+     ],
+     "linked_existing_resources": [
+      "cc-daily-care"
+     ]
+    },
+    "recruitment": [
+     "온라인 홍보물을 통한 참여자 모집",
+     "관내 유관기관 게시판 안내"
+    ],
+    "budget_items": [
+     {
+      "item": "활동 장소 대관료",
+      "unit": "회",
+      "quantity": 8.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     },
+     {
+      "item": "진행 강사 수당",
+      "unit": "시간",
+      "quantity": 16.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "프로그램 참여 회차별 출석률",
+      "definition": "개설된 전체 회차 대비 실제 참여 인원의 비율",
+      "data_source": "운영 일지",
+      "measurable_by_data": false
+     },
+     {
+      "name": "춘천시 20대 연령 유동량 변화",
+      "definition": "대상 지역·연령 집단 전체의 월별 유동량 변화 추이",
+      "data_source": "통신사 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "참여자 초기 이탈 발생 가능성",
+      "mitigation": "소규모 그룹 편성을 통한 밀착 지원 및 안내 문자 발송"
+     },
+     {
+      "risk": "기상 악화로 인한 오프라인 활동 지장",
+      "mitigation": "실내 대안 공간 확보 및 일정 변경 공지 체계 마련"
+     }
+    ],
+    "assumptions": [
+     "본 자료는 예시 입력이며 실제 분석 결과가 아님",
+     "원인 코드가 C3_overall_withdrawal이므로 담당자의 면밀한 현장 확인 필요"
+    ],
+    "status": "draft_needs_review"
+   },
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-02",
+    "source": "generated",
+    "revision": 0,
+    "title": "춘천시 20대 온라인 연계 오프라인 단계형 활력 프로그램",
+    "one_liner": "온라인 소통으로 시작해 오프라인 참여로 이어지는 단계형 프로그램",
+    "format": "online",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대의 2025-12 기준 사회활동 관련 소비 건수 변화(-0.083)와 연령 유동량 변화(-0.041)에서 나타난 생활 위축에 대응하기 위해, 외부 활동에 부담을 느끼는 대상이 온라인에서 출발하여 점진적으로 오프라인 활동에 참여할 수 있는 단계형 프로그램의 기획이 필요합니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [],
+     "differs_from_existing": "기존 자원인 우유배달서비스나 고독사 예방 사업과 달리, 온라인 커뮤니티 소통에서 출발하여 오프라인 활동으로 연계되는 단계적 접근 방식을 취합니다."
+    },
+    "activities": [
+     {
+      "name": "온라인 안부 및 관심사 공유",
+      "description": "온라인 플랫폼을 통한 일상 소통 및 미션 수행",
+      "frequency": "주 2회",
+      "time_slot": "화요일 및 목요일 오후 8시부터 9시까지",
+      "format": "online"
+     },
+     {
+      "name": "오프라인 합동 모임",
+      "description": "온라인에서 교류한 참여자들이 오프라인에서 만나는 활동",
+      "frequency": "격주 1회",
+      "time_slot": "토요일 오후 2시부터 4시까지",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 10
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시 디지털 센터 (확인 필요)"
+     ],
+     "linked_existing_resources": [
+      "cc-loneliness-prevention"
+     ]
+    },
+    "recruitment": [
+     "온라인 커뮤니티 및 SNS 채널 홍보",
+     "청년 관련 웹사이트 게시"
+    ],
+    "budget_items": [
+     {
+      "item": "온라인 플랫폼 운영 비용",
+      "unit": "월",
+      "quantity": 1.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     },
+     {
+      "item": "오프라인 모임 다보름 간식비",
+      "unit": "회",
+      "quantity": 2.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "온라인 참여자 중 오프라인 전환율",
+      "definition": "온라인 프로그램 참여 인원 중 오프라인 모임에 참석한 인원의 비율",
+      "data_source": "운영 기록",
+      "measurable_by_data": false
+     },
+     {
+      "name": "춘천시 20대 사회활동 관련 소비 건수 변화",
+      "definition": "대상 지역·연령 집단 전체의 월별 사회활동 소비 건수 변화 추이",
+      "data_source": "카드사 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "온라인 참여에서 오프라인 참여로의 전환율 저조",
+      "mitigation": "참여 독려 리워드 제공 및 부드러운 분위기 조성"
+     },
+     {
+      "risk": "온라인 플랫폼 접속 오류 및 소통 지연",
+      "mitigation": "사전 테스트 진행 및 기술 지원 담당자 배치"
+     }
+    ],
+    "assumptions": [
+     "본 자료는 예시 입력이며 실제 분석 결과가 아님",
+     "원인 코드가 C3_overall_withdrawal이므로 담당자의 현장 상황 검토 필요"
+    ],
+    "status": "draft_needs_review"
+   },
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-03",
+    "source": "generated",
+    "revision": 0,
+    "title": "춘천시 20대 기존 자원 연계형 맞춤 돌봄 및 활동 프로그램",
+    "one_liner": "기존 자원과 연계하면서 새로운 소그룹 활동을 더한 프로그램",
+    "format": "linked",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대 집단의 2025-12 기준 사회활동 관련 소비 건수 변화(-0.083)와 연령 유동량 변화(-0.041)로 확인된 활동 위축을 해소하기 위해, 기존의 일상돌봄서비스 및 우유배달서비스 등과 연계하면서도 새로운 현장 활동을 결합한 통합 지원이 요구됩니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [],
+     "differs_from_existing": "기존 자원인 일상돌봄서비스 등의 단순 상담 안내에 머무르지 않고, 신규 소그룹 문화 체험 활동을 함께 연계하여 운영합니다."
+    },
+    "activities": [
+     {
+      "name": "기존 자원 연계 상담 및 안내",
+      "description": "대상자 맞춤형 복지 자원 안내 및 신청 지원",
+      "frequency": "주 1회",
+      "time_slot": "금요일 오후 2시부터 4시까지",
+      "format": "hybrid"
+     },
+     {
+      "name": "신규 공동 공예 및 만들기 체험",
+      "description": "손쉽게 참여할 수 있는 공예 활동을 통한 성취감 제고",
+      "frequency": "주 1회",
+      "time_slot": "화요일 오후 3시부터 5시까지",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 8
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시 복지정책과 (확인 필요)"
+     ],
+     "linked_existing_resources": [
+      "cc-daily-care",
+      "cc-milk-check"
+     ]
+    },
+    "recruitment": [
+     "행정복지센터 방문 안내",
+     "유관기관 연계 홍보"
+    ],
+    "budget_items": [
+     {
+      "item": "체험 활동 재료비",
+      "unit": "개",
+      "quantity": 20.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     },
+     {
+      "item": "홍보 인쇄물 제작비",
+      "unit": "부",
+      "quantity": 100.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "기존 자원 연계 상담 건수",
+      "definition": "프로그램 기간 동안 기존 자원으로 연계된 상담 횟수",
+      "data_source": "기관 운영 기록",
+      "measurable_by_data": false
+     },
+     {
+      "name": "춘천시 20대 연령 유동량 변화",
+      "definition": "대상 지역·연령 집단 전체의 월별 유동량 변화 추이",
+      "data_source": "통신사 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "기존 자원 연계 기준 부합 여부 확인 지연",
+      "mitigation": "사전에 관계 기관과 협의 체계 구축"
+     },
+     {
+      "risk": "참여 대상자의 참여율 저조",
+      "mitigation": "주기적인 안부 연락 및 맞춤형 일정 조율"
+     }
+    ],
+    "assumptions": [
+     "본 자료는 예시 입력이며 실제 분석 결과가 아님",
+     "원인 코드가 C3_overall_withdrawal이므로 담당자의 자원 적합성 검토 필요"
+    ],
+    "status": "draft_needs_review"
+   }
+  ],
+  "run3": [
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-01",
+    "source": "generated",
+    "revision": 0,
+    "title": "춘천시 20대 생활 전반 위축 예방을 위한 오프라인 소모임 프로그램",
+    "one_liner": "춘천시 20대의 생활 전반 위축 완화를 위한 대면 오프라인 소모임 프로그램",
+    "format": "offline_group",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대 집단을 대상으로 한 사회활동 관련 소비 건수 변화 -8.3% 및 연령 유동량 변화 -4.1% 집계 신호가 나타나 생활 전반 위축 현상이 관측되고 있습니다. 기존 자원은 주로 기관 상담과 안내 중심으로 운영되어 20대가 가볍게 참여할 대면 소모임 활동이 부족합니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [],
+     "differs_from_existing": "기존 자원인 일상돌봄서비스 및 고독사 예방 사업은 기관 상담과 대상자 확인 중심이나, 본 기획은 20대가 직접 모여 소통하는 오프라인 소모임 활동을 제공합니다."
+    },
+    "activities": [
+     {
+      "name": "주말 오프라인 소모임",
+      "description": "참여자 간 소통과 정서적 교류를 위한 오프라인 모임 진행",
+      "frequency": "주 1회",
+      "time_slot": "토요일 오후 2시~4시",
+      "format": "offline"
+     },
+     {
+      "name": "현장 산책 및 문화 활동",
+      "description": "야외 활동을 통한 지역 내 이동 및 활력 증진",
+      "frequency": "격주 1회",
+      "time_slot": "일요일 오전 10시~12시",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 6
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시 20대 청년 센터(확인 필요)"
+     ],
+     "linked_existing_resources": [
+      "cc-daily-care"
+     ]
+    },
+    "recruitment": [
+     "온라인 홍보물 게시",
+     "행정복지센터 안내"
+    ],
+    "budget_items": [
+     {
+      "item": "활동 공간 대여비",
+      "unit": "시간",
+      "quantity": 12.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     },
+     {
+      "item": "다과 및 재료비",
+      "unit": "식",
+      "quantity": 20.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "프로그램 참여율",
+      "definition": "전체 회차 대비 평균 출석률",
+      "data_source": "운영 일지",
+      "measurable_by_data": false
+     },
+     {
+      "name": "사회활동 관련 소비 건수 변화",
+      "definition": "대상 지역·연령 집단 전체의 월별 사회활동 관련 소비 건수 변화",
+      "data_source": "카드 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "참여자 출석률 저조",
+      "mitigation": "사전 알림 문자 발송 및 참여 독려"
+     },
+     {
+      "risk": "공간 대여 일정 마감",
+      "mitigation": "사전 예비 공간 확보"
+     }
+    ],
+    "assumptions": [
+     "본 기획은 예시 입력이며 실제 분석 결과가 아님",
+     "소비와 이동 감소의 원인에 대해 담당자의 추가 확인이 필요함"
+    ],
+    "status": "draft_needs_review"
+   },
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-02",
+    "source": "generated",
+    "revision": 0,
+    "title": "춘천시 20대 생활 전반 위축 완화를 위한 온라인-오프라인 단계형 프로그램",
+    "one_liner": "온라인 소통에서 오프라인 활동으로 이어지는 춘천시 20대 맞춤형 단계형 프로그램",
+    "format": "hybrid",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "춘천시 20대 집단에서 사회활동 관련 소비 건수 변화 -8.3% 및 연령 유동량 변화 -4.1%가 나타나 생활 전반 위축 가설이 제기됩니다. 외부 활동이 부담스러운 대상이 온라인을 통해 참여를 시작한 뒤 오프라인으로 전환할 수 있는 단계형 접근이 필요합니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [],
+     "differs_from_existing": "기존 자원과 달리 온라인 사전 모임으로 진입 장벽을 낮추고 오프라인 활동으로 연계하는 하이브리드 방식을 적용합니다."
+    },
+    "activities": [
+     {
+      "name": "온라인 아이스브레이킹",
+      "description": "화상 회의를 통한 가벼운 소통 및 참여 독려",
+      "frequency": "주 1회",
+      "time_slot": "수요일 저녁 8시~9시",
+      "format": "online"
+     },
+     {
+      "name": "오프라인 소그룹 모임",
+      "description": "온라인 참여자 간 대면 소모임 진행",
+      "frequency": "격주 1회",
+      "time_slot": "토요일 오후 3시~5시",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 6
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시 자원봉사센터(확인 필요)"
+     ],
+     "linked_existing_resources": [
+      "cc-loneliness-prevention"
+     ]
+    },
+    "recruitment": [
+     "청년 커뮤니티 온라인 홍보"
+    ],
+    "budget_items": [
+     {
+      "item": "온라인 플랫폼 이용료",
+      "unit": "월",
+      "quantity": 1.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     },
+     {
+      "item": "모임 공간 대여비",
+      "unit": "시간",
+      "quantity": 8.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "온오프라인 전환율",
+      "definition": "온라인 참여자 중 오프라인 모임 참여 비율",
+      "data_source": "운영 기록",
+      "measurable_by_data": false
+     },
+     {
+      "name": "연령 유동량 변화",
+      "definition": "대상 지역·연령 집단 전체의 월별 연령 유동량 변화",
+      "data_source": "통신 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "온라인에서 오프라인으로의 전환율 저하",
+      "mitigation": "소규모 그룹 사전 안내 및 개별 연락 실시"
+     },
+     {
+      "risk": "기술적 문제 발생",
+      "mitigation": "사전 접속 테스트 진행"
+     }
+    ],
+    "assumptions": [
+     "본 기획은 예시 입력이며 실제 분석 결과가 아님",
+     "원인 C3_overall_withdrawal에 대한 구체적 원인 파악이 선행되어야 함"
+    ],
+    "status": "draft_needs_review"
+   },
+   {
+    "schema_version": "program-plan-0.2",
+    "plan_id": "P-echeck01-03",
+    "source": "generated",
+    "revision": 0,
+    "title": "춘천시 20대 생활 전반 위축 대응 기존 자원 연계형 활동 프로그램",
+    "one_liner": "기존 자원 연계와 신규 소그룹 활동을 결합한 춘천시 20대 지원 프로그램",
+    "format": "linked",
+    "target": {
+     "region": "춘천시",
+     "age_group": 20,
+     "sex": "all"
+    },
+    "risk_causes_addressed": [
+     "C3_overall_withdrawal"
+    ],
+    "problem_statement": "사회활동 관련 소비 건수 변화 -8.3% 및 연령 유동량 변화 -4.1% 수치가 집계된 춘천시 20대 집단을 위해, 기존 자원의 안내를 넘어 실질적인 소그룹 참여 기회를 함께 제공하는 연계형 프로그램이 요구됩니다.",
+    "data_evidence": [
+     "E1",
+     "E2"
+    ],
+    "novelty": {
+     "gap_causes": [],
+     "differs_from_existing": "단순 안내에 그치지 않고 기존 자원 상담과 신규 소그룹 활동을 연계하여 운영합니다."
+    },
+    "activities": [
+     {
+      "name": "기존 자원 안내 및 상담",
+      "description": "필요 서비스 안내 및 참여 신청 지원",
+      "frequency": "주 1회",
+      "time_slot": "목요일 오후 2시~3시",
+      "format": "offline"
+     },
+     {
+      "name": "신규 소그룹 활동",
+      "description": "참여자 간 관심사 공유 및 소통 모임",
+      "frequency": "주 1회",
+      "time_slot": "금요일 오후 4시~6시",
+      "format": "offline"
+     }
+    ],
+    "schedule": {
+     "duration_weeks": 4,
+     "sessions": 8
+    },
+    "operation": {
+     "lead_candidates": [
+      "춘천시 보건소(확인 필요)"
+     ],
+     "linked_existing_resources": [
+      "cc-daily-care",
+      "cc-loneliness-prevention"
+     ]
+    },
+    "recruitment": [
+     "행정복지센터 방문 홍보"
+    ],
+    "budget_items": [
+     {
+      "item": "홍보 인쇄물 제작비",
+      "unit": "부",
+      "quantity": 100.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     },
+     {
+      "item": "소모임 운영 재료비",
+      "unit": "식",
+      "quantity": 20.0,
+      "unit_cost_krw": null,
+      "basis": "단가 확인 필요"
+     }
+    ],
+    "kpis": [
+     {
+      "name": "자원 연계 건수",
+      "definition": "기존 자원 연계 안내 및 신청 완료 건수",
+      "data_source": "운영 기록",
+      "measurable_by_data": false
+     },
+     {
+      "name": "사회활동 관련 소비 건수 변화",
+      "definition": "대상 지역·연령 집단 전체의 월별 사회활동 관련 소비 건수 변화",
+      "data_source": "카드 데이터",
+      "measurable_by_data": true
+     }
+    ],
+    "trend_references": [],
+    "risks_and_mitigations": [
+     {
+      "risk": "기존 자원 신청 기준 불일치",
+      "mitigation": "사전 대상자 연령 및 기준 확인 절차 강화"
+     },
+     {
+      "risk": "참여자 참여 저조",
+      "mitigation": "담당자 동행 및 맞춤형 안내 제공"
+     }
+    ],
+    "assumptions": [
+     "본 기획은 예시 입력이며 실제 분석 결과가 아님",
+     "원인에 대한 확정이 아닌 가설 단계이므로 담당자의 검토가 필요함"
+    ],
+    "status": "draft_needs_review"
+   }
+  ]
+ }
+}

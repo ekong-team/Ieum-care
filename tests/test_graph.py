@@ -46,6 +46,8 @@ def nodes_run(state, name):
 
 class PipelineFlowTests(unittest.TestCase):
     def run_with(self, **overrides):
+        # 흐름 규칙만 확인하므로 평가는 점수가 고정된 가짜(원안 72·54, 수정안 66)로 둔다. 실제 채점은 test_evaluate.py.
+        overrides.setdefault("evaluate_plans", stubs.evaluate_plans)
         return run_pipeline(PROFILE, mode="offline", engines=replace(Engines(), **overrides), run_id="run-test0001")
 
     def test_full_run_with_stubs(self):
