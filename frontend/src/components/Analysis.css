@@ -1,45 +1,56 @@
 .analysis-page .panel {
-  margin-bottom: 22px;
-  padding: 26px;
+  margin-bottom: 20px;
+  padding: 22px;
 }
 .analysis-page h2 {
-  margin: 0 0 14px;
-  font-size: 19px;
+  margin: 0 0 12px;
+  font-size: 16px;
 }
 .analysis-page h3 {
-  margin-top: 24px;
-  font-size: 15px;
-}
-.analysis-page p,
-.analysis-page li {
-  line-height: 1.8;
+  margin: 18px 0 10px;
   font-size: 13px;
+}
+/* 본문만 카드 범위에 적용하고 페이지 제목·부제·안내문은 공통 스타일을 따른다. */
+.analysis-page .panel p:not(.muted),
+.analysis-page .panel li {
+  line-height: 1.9;
+  font-size: 12px;
+  color: #6f7b74;
   overflow-wrap: anywhere;
+}
+.analysis-page .panel .muted {
+  font-size: 11px;
+  line-height: 1.8;
 }
 .analysis-flow {
   display: flex;
-  gap: 12px;
-  list-style-position: inside;
+  gap: 10px;
+  list-style: none;
   flex-wrap: wrap;
   padding: 0;
   margin: 0 0 24px;
 }
 .analysis-flow li {
-  background: #eef4ef;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px 15px;
-  color: #345e4c;
+  padding: 8px 12px;
+  color: var(--green);
+  font-size: 11px;
+  line-height: 1.8;
 }
 .analysis-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 .analysis-summary article {
-  padding: 22px;
+  padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 15px;
   background: white;
 }
 .analysis-summary span,
@@ -48,88 +59,96 @@
   display: block;
 }
 .analysis-summary strong {
-  font-size: 25px;
-  color: #20523f;
-  margin: 10px 0;
+  font-size: 30px;
+  color: var(--green);
+  margin: 9px 0;
 }
-.analysis-summary span,
-.analysis-summary small {
+.analysis-summary span {
   color: var(--muted);
   font-size: 12px;
+}
+.analysis-summary small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
 }
 .analysis-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
-.analysis-control label {
-  display: block;
-  font-size: 13px;
-  margin-bottom: 8px;
-}
 .analysis-control select {
   width: 100%;
   margin-bottom: 18px;
-  padding: 12px;
-  min-height: 44px;
 }
 .analysis-evidence {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 14px;
 }
 .analysis-evidence > div {
-  padding: 18px;
-  border-radius: 10px;
-  background: #f4f7f4;
+  padding: 16px;
+  border-radius: 8px;
+  background: #f5f8f5;
 }
 .analysis-evidence dt {
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.8;
+  color: var(--muted);
 }
 .analysis-evidence dd {
-  font-size: 25px;
-  color: #20523f;
-  margin: 12px 0;
-  font-weight: bold;
+  font-size: 21px;
+  color: var(--green);
+  margin: 9px 0;
+  font-weight: 600;
 }
 .analysis-page details {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 .analysis-page summary {
   cursor: pointer;
-  font-size: 13px;
-  padding: 10px 0;
+  font-size: 11px;
+  color: #5f7567;
+  padding: 8px 0;
 }
 .analysis-job {
-  background: #edf5f0;
-  border: 1px solid #c3d7ca;
+  background: #f0f5f0;
+  border: 1px solid var(--border);
   padding: 20px;
-  margin-bottom: 22px;
-  border-radius: 12px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+  font-size: 12px;
 }
 .analysis-job p {
   margin-bottom: 0;
+  font-size: 11px;
+  line-height: 1.8;
 }
 .analysis-error,
 .analysis-job.failed {
   background: #fff3ee;
   color: #913b28;
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px 16px;
+  font-size: 11px;
+  line-height: 1.8;
 }
 .analysis-consent {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin: 18px 0;
-  line-height: 1.7;
-  font-size: 13px;
+  gap: 8px;
+  margin: 16px 0;
+  line-height: 1.8;
+  font-size: 11px;
+  font-weight: 400;
+  color: #5f7567;
 }
 .analysis-consent input {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+  margin: 2px 0 0;
+  accent-color: var(--green);
 }
 .analysis-review {
   border-top: 1px solid var(--border);
@@ -140,14 +159,16 @@
   gap: 12px;
 }
 .analysis-sources article {
-  padding: 18px;
-  background: #f6f8f6;
+  padding: 16px;
+  background: #f5f8f5;
   border: 1px solid var(--border);
   border-radius: 10px;
 }
 .analysis-sources h4 {
   margin: 0 0 8px;
-  line-height: 1.6;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.8;
 }
 .analysis-excerpt {
   white-space: pre-wrap;
@@ -156,25 +177,30 @@
 }
 .analysis-actions {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .analysis-page blockquote {
-  border-left: 3px solid #8cab98;
-  padding-left: 18px;
-  margin: 20px 0;
+  border-left: 3px solid #adc7b8;
+  padding-left: 12px;
+  margin: 16px 0;
+  color: #5f7567;
+  font-size: 11px;
+  line-height: 1.8;
 }
 .analysis-report-dialog {
   width: min(1100px, 96vw);
   max-width: 96vw;
   max-height: 94vh;
-  border: 1px solid #cad9ce;
-  border-radius: 14px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
   padding: 0;
-  color: #243b30;
+  color: #233e36;
 }
 .analysis-report-dialog::backdrop {
-  background: rgb(16 36 26 / 55%);
+  background: #15352b66;
+  backdrop-filter: blur(3px);
 }
 .analysis-report-dialog[open] {
   display: flex;
@@ -184,15 +210,18 @@
 }
 .analysis-report-toolbar {
   padding: 20px;
-  border-bottom: 1px solid #dce5dd;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .analysis-report-toolbar h2 {
   margin: 0;
+  font-size: 16px;
 }
 .analysis-report-toolbar p {
   margin: 8px 0 16px;
-  font-size: 13px;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
 }
 .analysis-report-dialog iframe {
   display: block;
@@ -202,26 +231,8 @@
   border: 0;
   background: #f2f5f2;
 }
-.analysis-report-toolbar button {
-  border: 1px solid #28634b;
-  border-radius: 8px;
-  background: #28634b;
-  color: white;
-  padding: 11px 14px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.analysis-report-toolbar button.secondary {
-  background: white;
-  color: #28634b;
-  border-color: #cad9ce;
-}
-.analysis-report-toolbar button:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-@media (max-width: 760px) {
+/* 버튼 색상·높이·테두리·비활성 상태는 복지 추천과 같은 primary/secondary를 사용한다. */
+@media (max-width: 640px) {
   .analysis-columns,
   .analysis-evidence {
     grid-template-columns: 1fr;
@@ -232,7 +243,16 @@
   .analysis-page .panel {
     padding: 18px;
   }
-  .analysis-page button {
-    min-height: 44px;
+  .analysis-actions {
+    align-items: stretch;
   }
+  .analysis-actions > button {
+    flex: 1 1 180px;
+  }
+}
+
+.analysis-page pre {
+  font: 11px/1.8 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
