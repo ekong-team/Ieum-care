@@ -22,6 +22,7 @@ from ai.contracts import (CAUSE_LABELS, MAX_REVISIONS, CauseHypothesis, Existing
                           GroundingReport, PipelineState, PlanEvaluation, ProgramPlan, TargetProfile, TrendReference)
 from ai.graph.trace import TraceRecorder
 from ai.nodes import causes as cause_rules
+from ai.nodes import planner
 from ai.nodes import stubs
 from ai.nodes import welfare
 from ai.nodes.context import NodeContext
@@ -48,7 +49,8 @@ class Engines:
     recommend_existing: Callable[[NodeContext, TargetProfile], ExistingResources] = welfare.recommend_existing
     search_trends: Callable[[NodeContext, PlanningInput], list[TrendReference]] = stubs.search_trends
     analyze_gaps: Callable[[NodeContext, PlanningInput], list[GapItem]] = stubs.analyze_gaps
-    generate_plans: Callable[[NodeContext, PlanningInput], list[ProgramPlan]] = stubs.generate_plans
+    # live면 Gemini로 생성하고, offline이면 planner 안에서 가짜 구현으로 넘긴다.
+    generate_plans: Callable[[NodeContext, PlanningInput], list[ProgramPlan]] = planner.generate_plans
     # (통과한 기획안, 리포트). 통과한 기획안은 문제 항목만 지운 수정본일 수 있다.
     check_grounding: Callable[[NodeContext, list[ProgramPlan], PlanningInput],
                               tuple[list[ProgramPlan], GroundingReport]] = stubs.check_grounding
@@ -103,6 +105,10 @@ class _Node:
                 update, decision, reasons = {"failed": True}, "실패로 실행 중단", [message]
                 extra = {"errors": [message]}
             status = "failed"
+        if ctx.warnings:
+            # 노드 함수가 ctx.warn()으로 남긴 주의 사항을 판단 기록과 최종 경고에 함께 남긴다.
+            reasons = reasons + ctx.warnings
+            extra["warnings"] = update.get("warnings", []) + extra.get("warnings", []) + ctx.warnings
         finished = self.recorder.emit(self.name, status, decision=decision, reasons=reasons,
                                       llm_called=ctx.calls.get("gemini", 0) > 0, external_calls=dict(ctx.calls),
                                       duration_ms=int((monotonic() - clock) * 1000))
