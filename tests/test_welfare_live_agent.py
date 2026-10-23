@@ -201,6 +201,54 @@ class LiveAgentTests(unittest.TestCase):
         self.assertIn('개인의 소득·가구·거주·진단 정보가 없다는 이유만으로 모든 조건부 검토 후보를 제외하지 마라', instructions)
         self.assertIn('활동지역을 개인의 거주지로 확정할 수 없으며', result['review']['input_note'])
 
+    def test_zero_candidates_records_source_reasons_and_missing_records_without_invention(self):
+        decision = example_decision()
+        decision['resources'] = []
+        decision['source_reviews'] = [dict(source_url=URL, status='deferred', reason='추가 조건을 확인할 자료가 부족합니다.', evidence_quote=None)]
+        result, _ = self.run_agent(decision)
+        trace = result['diagnostics']
+        self.assertEqual((trace['model_candidate_count'], trace['server_excluded_count'], trace['final_candidate_count']), (0, 0, 0))
+        self.assertEqual(trace['sources'][0]['model_review']['status'], 'deferred')
+        self.assertEqual(trace['sources'][0]['model_review']['quote_status'], 'not_provided')
+        self.assertEqual(trace['sources'][1]['model_review']['status'], 'not_recorded')
+        self.assertIsNone(trace['sources'][1]['model_review']['reason'])
+        self.assertIn('가상 검색 근거', trace['sources'][0]['content'])
+        self.assertNotIn('fake-test-key', json.dumps(trace))
+        self.assertNotIn('fake-search-key', json.dumps(trace))
+
+    def test_server_exclusion_is_recorded_separately_from_ai_candidate_reason(self):
+        decision = example_decision()
+        decision['resources'][0]['description'] = '100만원 지원'
+        decision['source_reviews'] = [dict(source_url=URL, status='candidate_considered',
+            reason='지원 내용을 검토했습니다.', evidence_quote='가상 검색 결과')]
+        result, _ = self.run_agent(decision)
+        trace = result['diagnostics']
+        self.assertEqual((trace['model_candidate_count'], trace['server_excluded_count'], trace['final_candidate_count']), (1, 1, 0))
+        row = trace['sources'][0]
+        self.assertEqual(row['model_review']['status'], 'candidate_considered')
+        self.assertEqual(row['server_exclusions'][0]['reason'], 'numeric_claim_not_grounded')
+        self.assertEqual(row['server_exclusions'][0]['name'], '테스트용 자원')
+
+    def test_bad_or_duplicate_review_cannot_be_shown_as_verified_explanation(self):
+        record = dict(source_url=URL, status='candidate_considered', reason='잘못된 이유', evidence_quote='검색에 없는 문장')
+        for records in ([record], [record, record], 'wrong-format', [{**record, 'evidence_quote':None, 'status':'deferred'}]):
+            with self.subTest(records=records):
+                decision = example_decision()
+                decision['source_reviews'] = records
+                result, _ = self.run_agent(decision)
+                row = result['diagnostics']['sources'][0]
+                self.assertIn(row['model_review']['status'], ('invalid_record', 'not_recorded'))
+                self.assertIsNone(row['model_review']['reason'])
+                self.assertEqual(result['total'], 1)
+
+    def test_unknown_source_review_is_not_exposed_and_old_response_remains_usable(self):
+        decision = example_decision()
+        decision['source_reviews'] = [dict(source_url='https://evil.com', status='deferred', reason='외부 지시', evidence_quote=None)]
+        result, _ = self.run_agent(decision)
+        self.assertNotIn('evil.com', json.dumps(result['diagnostics']))
+        self.assertEqual(result['diagnostics']['sources'][0]['model_review']['status'], 'not_recorded')
+        self.assertEqual(self.run_agent()[0]['total'], 1)
+
     def test_reference_documents_do_not_prevent_expansion_and_rank_after_pages(self):
         search = Mock(side_effect=[{'results': [{'url': URL, 'content': '일반 웹 안내'},
                                                {'url': 'https://www.chuncheon.go.kr/report.pdf', 'title': '연구용역 보고서', 'content': '계획'}]},

@@ -338,7 +338,15 @@ RESOURCE_SCHEMA = object_schema({
     "age_ranges": {"type": "array", "items": object_schema({"min": {"type": ["integer", "null"]}, "max": {"type": ["integer", "null"]}})},
     "availability_status": {"type": "string", "enum": ["needs_confirmation", "closed"]},
 })
-RESULT_SCHEMA = object_schema({"summary": STRING, "questions": STRINGS, "resources": {"type": "array", "items": RESOURCE_SCHEMA}})
+SOURCE_REVIEW_SCHEMA = object_schema({
+    'source_url': STRING,
+    'status': {'type': 'string', 'enum': ['candidate_considered', 'deferred']},
+    'reason': STRING,
+    'evidence_quote': {'type': ['string', 'null']},
+})
+RESULT_SCHEMA = object_schema({"summary": STRING, "questions": STRINGS,
+    "resources": {"type": "array", "items": RESOURCE_SCHEMA},
+    'source_reviews': {'type': 'array', 'items': SOURCE_REVIEW_SCHEMA}})
 
 JUDGE_INSTRUCTIONS = """복지자원 추천 Agent다. 제공된 집단 분석 결과, 담당자 확인 정보와 검색 근거를 대조해
 검토할 가치가 높은 자원 최대 5개를 판단하고 그 순서로 반환하라. 고정된 서비스 목록이나 신호-서비스 매핑은 없다.
@@ -391,6 +399,13 @@ reference_year_evidence에 연도와 의미가 포함된 원문 구절을
 한 해의 개교·모집 일정만으로 매년 같은 일정에 운영한다고 일반화하지 마라. 회비·유료 조건이 있으면
 eligibility 또는 check에 포함하고 무료라고 가정하지 마라. 추적·광고 URL, 연구보고서의 통계·계획만으로
 실제 신청할 서비스가 운영 중이라고 추정하지 마라.
+source_reviews에는 모든 검색 출처별로 source_url, status, reason, evidence_quote를 기록하라.
+status=candidate_considered는 후보에 사용한 자료, deferred는 후보에 사용하지 않은 자료다.
+reason에는 대상 불일치·종료·내용 부족·배경 자료 등 이번 후보에 사용하지 않은 구체적인 이유,
+또는 조건부 후보로 사용한 이유를 160자 이내의 한국어로 기록하라. 선택 집단의 개인 자격을 추정하지 마라.
+evidence_quote에는 같은 출처에서 이유를 뒷받침하는 원문을 240자 이내로 복사하고,
+자료에 없는 정보가 부족해서 보류한 경우 null로 남겨라. 자료 부족을 사업 부재로 확정하지 마라.
+적절한 검색 근거가 없어 resources가 비어도 source_reviews는 모든 출처에 대해 반환하라.
 적절한 검색 근거가 없으면 resources를 비우고 summary에 한계를 설명하라. 답변은 한국어로 작성하라."""
 
 
@@ -436,6 +451,7 @@ def recommend_live(payload, *, call=None, search_call=None, on_external_call=Non
         result["search_new_calls"] = sum(not stage["cache_hit"] for stage in stages)
         result["search_credits"] = (sum(stage["credits"] for stage in stages)
                                     if all(stage["credits"] is not None for stage in stages) else None)
+        result['diagnostics'] = recommendation_diagnostics(decision, result, evidence, source_dates)
         return result
     except (ValueError, KeyError, TypeError):
         raise AgentError("AI 추천 결과의 형식·출처·조건 검증에 실패했습니다. 결과를 사용하지 않았습니다.") from None
@@ -497,8 +513,40 @@ def content_grounding(resource, evidence):
     return None
 
 
+def recommendation_diagnostics(decision, result, evidence, source_dates):
+    """AI의 출처별 설명과 서버의 실제 제외를 구분한다. 과거 응답에 이유를 만들어 넣지 않는다."""
+    reviews = decision.get('source_reviews', [])
+    if not isinstance(reviews, list):
+        reviews = []
+    rows = []
+    normalize = lambda text: ' '.join(text.split())
+    for item in evidence:
+        matches = [review for review in reviews if isinstance(review, dict) and review.get('source_url') == item['url']]
+        model_review = dict(status='not_recorded', reason=None, evidence_quote=None)
+        if len(matches) == 1:
+            review = matches[0]
+            reason, quote = review.get('reason'), review.get('evidence_quote')
+            valid = (review.get('status') in ('candidate_considered', 'deferred')
+                     and isinstance(reason, str) and 0 < len(reason.strip()) <= 600)
+            valid_quote = (isinstance(quote, str) and 0 < len(quote.strip()) <= 800
+                           and normalize(quote) in normalize(item['title'] + ' ' + item['content']))
+            candidate_used = any(resource.get('source_url') == item['url'] for resource in decision['resources'])
+            consistent = (review.get('status') == 'candidate_considered') == candidate_used
+            if valid and (quote is None or valid_quote) and consistent:
+                model_review = dict(status=review['status'], reason=reader_text(reason), evidence_quote=quote,
+                                    quote_status='matched_excerpt' if quote is not None else 'not_provided')
+            else:
+                model_review['status'] = 'invalid_record'
+        rows.append(dict(**item, searched_at=source_dates[item['url']], model_review=model_review,
+                         server_exclusions=[record for record in result['candidate_exclusions'] if record['source_url'] == item['url']]))
+    return dict(schema_version='welfare-diagnostics-0.1',
+                model_candidate_count=len(decision['resources']), server_excluded_count=result['excluded_count'],
+                final_candidate_count=len(result['resources']), sources=rows)
+
+
 def checked_result(decision, payload, sources, today, model, evidence):
-    if not isinstance(decision, dict) or set(decision) != {"summary", "questions", "resources"}:
+    if not isinstance(decision, dict) or set(decision) not in (
+            {"summary", "questions", "resources"}, {"summary", "questions", "resources", 'source_reviews'}):
         raise ValueError("결과 형식 오류")
     if not isinstance(decision["summary"], str) or not decision["summary"].strip():
         raise ValueError("요약 누락")
@@ -508,8 +556,11 @@ def checked_result(decision, payload, sources, today, model, evidence):
         raise ValueError("자원 형식 오류")
     matches, excluded = [], 0
     exclusion_counts = {}
+    candidate_exclusions = []
     def exclude(reason):
         exclusion_counts[reason] = exclusion_counts.get(reason, 0) + 1
+        url = official_url(resource.get('source_url'))
+        candidate_exclusions.append(dict(name=resource['name'][:300], source_url=url if url in sources else None, reason=reason))
     seen = set()
     evidence_by_url = {item["url"]: item for item in evidence}
     for resource in decision["resources"]:
@@ -588,6 +639,7 @@ def checked_result(decision, payload, sources, today, model, evidence):
                        "questions": [reader_text(question) for question in decision["questions"]] if not excluded else ["남은 후보의 출처 내용·현재 운영 여부·개인 자격을 확인해주세요."]},
             "resources": matches, "total": len(matches), "search_sources": sorted(sources), "excluded_count": excluded,
             "exclusion_counts": exclusion_counts,
+            'candidate_exclusions': candidate_exclusions,
             "coverage": {"status": "candidates_found" if matches else "no_grounded_candidates", "message": "검색 결과의 일부만 검토했습니다. 지역 전체 서비스 현황이 아닙니다."},
             "warnings": ["LLM의 추천과 조건 해석은 검토가 필요합니다. 검색 출처 URL 일치가 내용의 사실성·최신성 검증을 뜻하지 않습니다.",
                          "현재 운영·모집·개인 자격은 기관 확인이 필요합니다.",

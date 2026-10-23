@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import SearchDiagnostics from "./SearchDiagnostics.jsx";
 import {
   ageLabel,
   sexLabel,
@@ -446,6 +447,7 @@ export function Review({ result }) {
           <li key={i}>{text}</li>
         ))}
       </ul>
+      <SearchDiagnostics result={result} />
     </section>
   );
 }
