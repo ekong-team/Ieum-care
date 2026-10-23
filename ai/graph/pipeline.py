@@ -22,6 +22,7 @@ from ai.contracts import (CAUSE_LABELS, MAX_REVISIONS, CauseHypothesis, Existing
                           GroundingReport, PipelineState, PlanEvaluation, ProgramPlan, TargetProfile, TrendReference)
 from ai.graph.trace import TraceRecorder
 from ai.nodes import causes as cause_rules
+from ai.nodes import evaluate as plan_evaluation  # build_graph 안의 evaluate 노드 함수와 이름이 겹치지 않게
 from ai.nodes import gaps
 from ai.nodes import grounding
 from ai.nodes import planner
@@ -57,7 +58,7 @@ class Engines:
     # (통과한 기획안, 리포트). 통과한 기획안은 문제 항목만 지운 수정본일 수 있다.
     check_grounding: Callable[[NodeContext, list[ProgramPlan], PlanningInput],
                               tuple[list[ProgramPlan], GroundingReport]] = grounding.check_grounding
-    evaluate_plans: Callable[[NodeContext, list[ProgramPlan], PlanningInput], list[PlanEvaluation]] = stubs.evaluate_plans
+    evaluate_plans: Callable[[NodeContext, list[ProgramPlan], PlanningInput], list[PlanEvaluation]] = plan_evaluation.evaluate_plans
 
 
 class FlowError(ValueError):
