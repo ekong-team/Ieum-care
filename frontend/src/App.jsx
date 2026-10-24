@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { api, pages, targetLabel } from "./domain.js";
+import { pages, targetLabel } from "./domain.js";
 import useWelfare from "./useWelfare.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Analysis from "./components/Analysis.jsx";
+import Planning from "./components/Planning.jsx";
 import {
   AnalysisPanels,
   Filters,
@@ -11,88 +12,6 @@ import {
   ResourceDialog,
   PlanningHandoff,
 } from "./components/RecommendationParts.jsx";
-
-function PlanningInbox({ active }) {
-  const [requests, setRequests] = useState([]);
-  const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function load() {
-    setBusy(true);
-    setRequests([]);
-    setStatus("전달함을 불러오고 있습니다.");
-    try {
-      const result = await api("/api/planning/requests");
-      if (
-        result.schema_version !== "planning-inbox-0.1" ||
-        !Array.isArray(result.requests)
-      )
-        throw new Error("전달함 응답 형식을 확인해주세요.");
-      setRequests(result.requests);
-      setStatus(
-        `${result.requests.length}건 저장됨 · 기획 Agent 연결 대기 · 기획서 생성 없음`,
-      );
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  useEffect(() => {
-    if (active) load();
-  }, [active]);
-  return (
-    <section hidden={!active} aria-labelledby="planning-title">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">PROGRAM PLANNING</p>
-          <h1 id="planning-title">프로그램 기획 · 요청 전달함</h1>
-          <p className="subtitle">
-            복지 추천에서 준비한 요청입니다. 실제 기획 Agent는 아직 연결되지
-            않았습니다.
-          </p>
-        </div>
-      </div>
-      <div className="panel analysis-input-panel">
-        <button className="secondary" disabled={busy} onClick={load}>
-          전달함 새로고침
-        </button>
-        <p className="muted" role="status">
-          {status}
-        </p>
-        <div id="planning-inbox-list">
-          {requests.map((item) => (
-            <article className="resource-card" key={item.request.request_id}>
-              <h2>{targetLabel(item.request.target)}</h2>
-              <p>
-                {item.request.planning_type === "existing_resource_based"
-                  ? "기존 자원 활용"
-                  : "예방·신규 기획"}{" "}
-                · 선택 자원 {item.request.selected_resources.length}개 ·{" "}
-                {item.request.welfare_lookup.mode === "live"
-                  ? "실시간 추천"
-                  : "이전 저장 자료 조회"}
-              </p>
-              <p className="muted">
-                접수: {item.received_at} · 기획 Agent 연결 대기
-                {item.request.has_example_context ? " · 예시 분석 포함" : ""}
-              </p>
-              <p>{item.request.officer_prompt || "담당자 추가 요청 없음"}</p>
-              <details>
-                <summary>팀원에게 전달할 요청 원문</summary>
-                <pre>{JSON.stringify(item.request, null, 2)}</pre>
-              </details>
-            </article>
-          ))}
-        </div>
-        {!busy && !requests.length && (
-          <p className="muted">
-            복지 추천 화면에서 기획 요청을 준비하고 전달함에 저장하세요.
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
 
 export default function App() {
   const getPage = () =>
@@ -204,7 +123,7 @@ export default function App() {
             }}
           />
         </div>
-        <PlanningInbox active={page === "planning"} />
+        <Planning active={page === "planning"} />
         <Analysis active={page === 'analysis'} model={model} openRecommendations={(entry) => {
           model.selectEntry(entry);
           location.hash = '#recommendations';

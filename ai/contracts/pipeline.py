@@ -150,6 +150,7 @@ class PipelineState(TypedDict, total=False):
     run_id: str
     mode: Literal["live", "offline"]
     profile: TargetProfile
+    officer_request: str  # 담당자 추가 요청. 비어 있으면 없음
     causes: list[CauseHypothesis]
     existing_resources: ExistingResources
     trend_references: list[TrendReference]

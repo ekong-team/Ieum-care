@@ -10,6 +10,7 @@ import sys
 import socket
 from threading import BoundedSemaphore
 from copy import deepcopy
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -20,6 +21,7 @@ from ai.nodes.welfare import attach_response_routes, to_existing_resources  # no
 from ai.welfare_agent.analysis_input import prepare_analysis_inputs, latest_analysis_inputs  # noqa: E402
 from ai.welfare_agent.planning_handoff import PlanningInbox  # noqa: E402
 from backend.analysis import AnalysisService  # noqa: E402
+from backend.pipeline import PipelineService, RunNotFound  # noqa: E402
 
 LIVE_SLOT = BoundedSemaphore(1)
 
@@ -45,6 +47,19 @@ class Handler(SimpleHTTPRequestHandler):
                       '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css'}
 
     def do_GET(self):
+        url = urlsplit(self.path)
+        if url.path == '/api/pipeline/saved':
+            self.send_json(HTTPStatus.OK, {'schema_version': 'pipeline-saved-0.1', 'runs': self.server.pipeline.saved()})
+            return
+        if url.path.startswith('/api/pipeline/runs/'):
+            try:
+                after = parse_qs(url.query).get('after_seq', ['-1'])[0]
+                self.send_json(HTTPStatus.OK, self.server.pipeline.status(url.path.rsplit('/', 1)[1], int(after)))
+            except RunNotFound as error:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': str(error)})
+            except ValueError:
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'after_seq는 정수여야 합니다.'})
+            return
         if self.path == '/api/analysis/job':
             self.send_json(HTTPStatus.OK, self.server.analysis_service.state())
             return
@@ -58,7 +73,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.path == '/api/planning/requests':
             try:
-                self.send_json(HTTPStatus.OK, {'schema_version': 'planning-inbox-0.1', 'agent_connected': False,
+                self.send_json(HTTPStatus.OK, {'schema_version': 'planning-inbox-0.1', 'agent_connected': True,
                                               'requests': self.server.planning_inbox.list_requests()})
             except OSError:
                 self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': '기획 전달함을 읽지 못했습니다.'})
@@ -93,6 +108,32 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == '/api/pipeline/runs':
+            if self.headers.get_content_type() != 'application/json':
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 64 * 1024:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {'error': '통합 실행 요청 크기를 확인해주세요.'})
+                    return
+                result = self.server.pipeline.start(json.loads(self.rfile.read(length)))
+            except RunNotFound as error:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': str(error)})
+                return
+            except BlockingIOError as error:
+                self.send_json(HTTPStatus.CONFLICT, {'error': str(error)})
+                return
+            except PermissionError as error:
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': str(error)})
+                return
+            except (ValueError, TypeError, KeyError, UnicodeError) as error:
+                # Pydantic 오류 원문 대신 한국어 안내만 보낸다. 직접 만든 ValueError 문구는 그대로 쓴다.
+                message = str(error) if type(error) is ValueError else '대상 프로필 형식을 확인해주세요.'
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': message})
+                return
+            self.send_json(HTTPStatus.ACCEPTED, result)
+            return
         if self.path == '/api/analysis/runs':
             origin = self.headers.get('Origin')
             allowed = {f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost')
@@ -204,12 +245,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, result)
 
 
-def create_server(port=5175, *, planning_root=None):
+def create_server(port=5175, *, planning_root=None, runs_root=None, pipeline_engines=None):
     # React 빌드 결과만 제공한다. 소스·설정·원본 데이터는 정적 경로에 포함하지 않는다.
     server = LocalServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "frontend/dist")))
     server.analysis_inputs = None
     server.analysis_service = AnalysisService(ROOT, LIVE_SLOT, lambda: setattr(server, 'analysis_inputs', None))
     server.planning_inbox = PlanningInbox(planning_root or ROOT / 'data/processed/planning_requests')
+    server.pipeline = PipelineService(ROOT, LIVE_SLOT, server.planning_inbox, runs_root=runs_root, engines=pipeline_engines)
     return server
 
 

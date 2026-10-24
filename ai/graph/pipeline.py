@@ -43,6 +43,7 @@ class PlanningInput:
     trends: list[TrendReference]
     gaps: list[GapItem]
     revision_targets: list[tuple[ProgramPlan, PlanEvaluation]] = field(default_factory=list)
+    officer_request: str = ""  # 담당자 추가 요청 (복지 추천 전달함·직접 입력). 근거 규칙보다 우선하지 않는다
 
 
 @dataclass
@@ -69,7 +70,7 @@ def _planning(state: PipelineState, revision_targets=None) -> PlanningInput:
     return PlanningInput(run_id=state["run_id"], profile=state["profile"], causes=state.get("causes", []),
                          existing=state.get("existing_resources") or ExistingResources(status="unavailable", reason="미실행"),
                          trends=state.get("trend_references", []), gaps=state.get("gaps", []),
-                         revision_targets=revision_targets or [])
+                         revision_targets=revision_targets or [], officer_request=state.get("officer_request", ""))
 
 
 def _ids(plans) -> list[str]:
@@ -294,7 +295,8 @@ def route_after_evaluate(state: PipelineState) -> str:
 
 
 def run_pipeline(profile: TargetProfile, mode: Literal["live", "offline"] = "offline", engines: Optional[Engines] = None,
-                 recorder: Optional[TraceRecorder] = None, run_id: Optional[str] = None) -> PipelineState:
+                 recorder: Optional[TraceRecorder] = None, run_id: Optional[str] = None,
+                 officer_request: str = "") -> PipelineState:
     """그래프를 한 번 실행하고 최종 상태를 돌려준다. 판단 기록은 순서 번호(seq)대로 정렬한다."""
     if recorder and run_id and recorder.run_id != run_id:
         raise ValueError("run_id와 판단 기록기의 run_id가 다릅니다.")
@@ -302,7 +304,7 @@ def run_pipeline(profile: TargetProfile, mode: Literal["live", "offline"] = "off
     recorder = recorder or TraceRecorder(run_id)
     app = build_graph(engines, recorder, run_id)
     state = app.invoke({"run_id": run_id, "mode": mode, "profile": profile, "revision_count": 0,
-                        "trace": [], "errors": [], "warnings": []})
+                        "officer_request": officer_request, "trace": [], "errors": [], "warnings": []})
     state["trace"] = sorted(state["trace"], key=lambda event: event.seq)
     return state
 

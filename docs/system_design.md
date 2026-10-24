@@ -375,7 +375,7 @@ docs/system_design.md    # 본 문서
 | 전체 설계·인터페이스·통합(그래프·백엔드) | 김정욱 | 본 문서 |
 | ④-B 프로그램 기획(트렌드 검색·공백 분석·기획 생성·근거 검증) | 김정욱 | 구현 (`jeongwook/plan-generate`) |
 | ⑤ 평가 노드 전체(규칙 5축·예산 축·LLM 실현 가능성 축) | 김정욱 | 구현 (`jeongwook/evaluate`), 규칙은 [evaluation_rules.md](evaluation_rules.md) |
-| 통합 실행 화면 | 김정욱 | 미착수 |
+| 통합 실행 화면·백엔드 경로 | 김정욱 | 구현 (`jeongwook/integration`), [AI 흐름 안내](ai_pipeline.md) 통합 실행 절 |
 | ①② 데이터 재분석, 어댑터(→ TargetProfile) | 장현지·김한수 | 정제 파이프라인, 위험 규칙 v1 |
 | ③ 원인 분석 규칙(신호 → 원인 코드) | 장현지 + 김정욱 | 원인 코드 초안 |
 | ④-A 복지 추천 노드 연결 | 김정욱 (기존 함수 감싸기) | 복지 추천 Agent 완료 |
