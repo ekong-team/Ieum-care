@@ -162,11 +162,13 @@ function ManualForm({ disabled, onRun }) {
   return (
     <form className="panel planning-form" onSubmit={submit} aria-label="대상 직접 입력">
       <div className="section-heading">
+        <span className="step-number" aria-hidden="true">01</span>
         <h2>대상 직접 입력</h2>
         <button type="button" className="text-button" onClick={() => setForm(exampleForm())}>
           예시 값 채우기
         </button>
       </div>
+      <p className="muted planning-description">대상 집단과 관측 근거를 입력해 기획을 시작하세요.</p>
       <div className="planning-grid">
         <label>
           지역
@@ -248,62 +250,80 @@ function ManualForm({ disabled, onRun }) {
         <legend>근거 수치 (기획안은 여기 있는 수치만 인용합니다)</legend>
         {form.evidence.map((item, index) => (
           <div className="evidence-row" key={index}>
-            <span className="step-number">E{index + 1}</span>
-            <input
-              aria-label={`근거 ${index + 1} 이름`}
-              placeholder="이름 (예: 연령 유동량 변화)"
-              value={item.name}
-              onChange={(e) => setEvidence(index, "name", e.target.value)}
-            />
-            <input
-              aria-label={`근거 ${index + 1} 값`}
-              placeholder="값 (예: -0.041)"
-              inputMode="decimal"
-              value={item.value}
-              onChange={(e) => setEvidence(index, "value", e.target.value)}
-            />
-            <select
-              aria-label={`근거 ${index + 1} 단위`}
-              value={item.unit}
-              onChange={(e) => setEvidence(index, "unit", e.target.value)}
-            >
-              {Object.entries(UNITS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label={`근거 ${index + 1} 출처`}
-              value={item.source}
-              onChange={(e) => setEvidence(index, "source", e.target.value)}
-            >
-              {Object.entries(SOURCES).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label={`근거 ${index + 1} 관련 신호`}
-              value={item.related_signal}
-              onChange={(e) => setEvidence(index, "related_signal", e.target.value)}
-            >
-              <option value="">관련 신호 없음</option>
-              {Object.entries(SIGNALS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="text-button"
-              aria-label={`근거 ${index + 1} 삭제`}
-              onClick={() => set("evidence", form.evidence.filter((_, i) => i !== index))}
-            >
-              삭제
-            </button>
+            <div className="evidence-heading">
+              <span className="step-number">E{index + 1}</span>
+              <span>분석 근거 {index + 1}</span>
+              <button
+                type="button"
+                className="text-button"
+                aria-label={`근거 ${index + 1} 삭제`}
+                onClick={() => set("evidence", form.evidence.filter((_, i) => i !== index))}
+              >
+                삭제
+              </button>
+            </div>
+            <label className="evidence-name">
+              지표 이름
+              <input
+                aria-label={`근거 ${index + 1} 이름`}
+                placeholder="이름 (예: 연령 유동량 변화)"
+                value={item.name}
+                onChange={(e) => setEvidence(index, "name", e.target.value)}
+              />
+            </label>
+            <label>
+              값
+              <input
+                aria-label={`근거 ${index + 1} 값`}
+                placeholder="값 (예: -0.041)"
+                inputMode="decimal"
+                value={item.value}
+                onChange={(e) => setEvidence(index, "value", e.target.value)}
+              />
+            </label>
+            <label>
+              단위
+              <select
+                aria-label={`근거 ${index + 1} 단위`}
+                value={item.unit}
+                onChange={(e) => setEvidence(index, "unit", e.target.value)}
+              >
+                {Object.entries(UNITS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              출처
+              <select
+                aria-label={`근거 ${index + 1} 출처`}
+                value={item.source}
+                onChange={(e) => setEvidence(index, "source", e.target.value)}
+              >
+                {Object.entries(SOURCES).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="evidence-signal">
+              관련 신호
+              <select
+                aria-label={`근거 ${index + 1} 관련 신호`}
+                value={item.related_signal}
+                onChange={(e) => setEvidence(index, "related_signal", e.target.value)}
+              >
+                <option value="">관련 신호 없음</option>
+                {Object.entries(SIGNALS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         ))}
         <button
@@ -371,6 +391,7 @@ function Inbox({ active, disabled, onRun }) {
   return (
     <div className="panel planning-inbox">
       <div className="section-heading">
+        <span className="step-number" aria-hidden="true">02</span>
         <h2>복지 추천 전달함</h2>
         <button type="button" className="text-button" disabled={busy} onClick={load}>
           새로고침
@@ -869,11 +890,17 @@ export default function Planning({ active }) {
         <legend>실행 방식</legend>
         <label>
           <input type="radio" name="planning-mode" checked={mode === "offline"} onChange={() => setMode("offline")} />
-          예시 실행 (외부 호출 없음, 시연·리허설용)
+          <span>
+            <strong>예시 실행</strong>
+            <small>외부 호출 없이 흐름을 확인합니다.</small>
+          </span>
         </label>
         <label>
           <input type="radio" name="planning-mode" checked={mode === "live"} onChange={() => setMode("live")} />
-          실제 실행 (Gemini·Tavily, 무료 한도 사용)
+          <span>
+            <strong>실제 실행</strong>
+            <small>Gemini·Tavily의 무료 한도를 사용합니다.</small>
+          </span>
         </label>
       </fieldset>
       <div className="planning-layout">
