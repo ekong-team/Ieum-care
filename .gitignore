@@ -19,6 +19,8 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+# 통합 실행 결과 (설계 문서 6.1)
+data/runs/
 
 # SGIS 원본 경계는 별도 공유하고 출처 문서만 버전 관리
 data/external/sgis/*

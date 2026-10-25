@@ -606,7 +606,7 @@ export function PlanningHandoff({ record, selected, setSelected, busy }) {
       )
         throw new Error("전달함 응답을 확인해주세요.");
       setStatus(
-        "기획 전달함에 저장했습니다. 실제 기획 Agent는 연결 대기 중입니다.",
+        "기획 전달함에 저장했습니다. 프로그램 기획 탭에서 이 요청으로 통합 실행할 수 있습니다.",
       );
     } catch (error) {
       setStatus(`${error.message} 자동 재시도하지 않았습니다.`);
