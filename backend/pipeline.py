@@ -14,9 +14,11 @@ import re
 from threading import Lock, Thread
 from uuid import UUID, uuid4
 
-from ai.contracts import (ExistingResources, RiskInfo, Target, TargetProfile, WelfareAnalysisContext)
-from ai.graph.pipeline import Engines, run_pipeline, state_to_json
+from ai.contracts import (CauseHypothesis, ExistingResources, GapItem, ProgramPlan, RiskInfo, Target, TargetProfile,
+                          TrendReference, WelfareAnalysisContext)
+from ai.graph.pipeline import Engines, PlanningInput, run_pipeline, state_to_json
 from ai.graph.trace import TraceRecorder
+from ai.nodes.context import NodeContext
 from ai.nodes.welfare import attach_response_routes, to_existing_resources
 from ai.welfare_agent.live_agent import config_status
 
@@ -157,6 +159,52 @@ class PipelineService:
             temporary.replace(self.runs_root / f"{run_id}.json")
         except OSError:
             record["error"] = "실행 결과를 파일로 저장하지 못했습니다. 이 화면을 닫으면 다시 볼 수 없습니다."
+
+    # ── 담당자 기획안 평가 ──────────────────────────────────────────────────
+    def evaluate(self, request: dict) -> dict:
+        """저장된 실행의 맥락(원인·기존 자원·공백·사례)으로 담당자 기획안 하나를 채점한다. 설계 문서 6.1.
+
+        그래프를 다시 돌리지 않는다. 담당자 기획안은 근거 검증 대신 형식 검증(Pydantic)만 하고(설계 5.3),
+        live면 실현 가능성 축만 Gemini 1회 호출한다. 짧은 작업이라 백그라운드 없이 바로 결과를 돌려준다.
+        """
+        if not isinstance(request, dict) or not {"run_id", "plan"} <= set(request) <= {"mode", "run_id", "plan"}:
+            raise ValueError("run_id와 plan이 필요합니다.")
+        mode = request.get("mode", "offline")
+        if mode not in ("live", "offline"):
+            raise ValueError("지원하지 않는 실행 방식입니다.")
+        if not isinstance(request["plan"], dict):
+            raise ValueError("기획안은 JSON 객체여야 합니다.")
+        record = self.status(request["run_id"])
+        if record["status"] != "completed":
+            raise ValueError("완료된 실행만 평가 기준으로 쓸 수 있습니다.")
+        result = record["result"]
+        plan = ProgramPlan.model_validate({**request["plan"], "source": "manual"})
+        profile = TargetProfile.model_validate(result["profile"])
+        if plan.target != profile.target:
+            raise ValueError("기획안의 대상(지역·연령·성별)이 기준 실행의 대상과 다릅니다.")
+        planning = PlanningInput(
+            run_id=record["run_id"], profile=profile,
+            causes=[CauseHypothesis.model_validate(item) for item in result.get("causes") or []],
+            existing=(ExistingResources.model_validate(result["existing_resources"]) if result.get("existing_resources")
+                      else ExistingResources(status="unavailable", reason="기준 실행에 기존 자원 결과 없음")),
+            trends=[TrendReference.model_validate(item) for item in result.get("trend_references") or []],
+            gaps=[GapItem.model_validate(item) for item in result.get("gaps") or []],
+            officer_request=record["officer_request"])
+        if mode == "live":
+            if not config_status()["configured"]:
+                raise PermissionError("서버의 Gemini·Tavily 키 설정을 확인해주세요.")
+            if not self.slot.acquire(blocking=False):
+                raise BlockingIOError("다른 AI 추천·분석이 실행 중입니다. 완료 후 다시 실행해주세요.")
+        ctx = NodeContext(run_id=record["run_id"], mode=mode)
+        try:
+            evaluation = self.engines.evaluate_plans(ctx, [plan], planning)[0]
+        finally:
+            if mode == "live":
+                self.slot.release()
+        original = next((item for item in result.get("evaluations") or [] if item["plan_id"] == plan.plan_id), None)
+        return {"schema_version": "manual-evaluation-0.1", "run_id": record["run_id"], "mode": mode,
+                "plan": plan.model_dump(mode="json"), "evaluation": evaluation.model_dump(mode="json"),
+                "original_evaluation": original, "external_calls": dict(ctx.calls), "warnings": ctx.warnings}
 
     # ── 조회 ────────────────────────────────────────────────────────────────
     def status(self, run_id: str, after_seq: int = -1) -> dict:
