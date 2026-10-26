@@ -12,6 +12,8 @@ from threading import BoundedSemaphore
 from copy import deepcopy
 from urllib.parse import parse_qs, urlsplit
 
+from pydantic import ValidationError
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from ai.welfare_agent.recommender import recommend, validate_request  # noqa: E402
@@ -133,6 +135,38 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(HTTPStatus.BAD_REQUEST, {'error': message})
                 return
             self.send_json(HTTPStatus.ACCEPTED, result)
+            return
+        if self.path == '/api/program/evaluate':
+            if self.headers.get_content_type() != 'application/json':
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {'error': 'application/json 요청이 필요합니다.'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 64 * 1024:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {'error': '평가 요청 크기를 확인해주세요.'})
+                    return
+                result = self.server.pipeline.evaluate(json.loads(self.rfile.read(length)))
+            except RunNotFound as error:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': str(error)})
+                return
+            except BlockingIOError as error:
+                self.send_json(HTTPStatus.CONFLICT, {'error': str(error)})
+                return
+            except PermissionError as error:
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': str(error)})
+                return
+            except (ValueError, TypeError, KeyError, UnicodeError) as error:
+                # Pydantic 오류는 첫 항목의 위치만 한국어로 알려 준다. 직접 만든 ValueError 문구는 그대로 쓴다.
+                if type(error) is ValueError:
+                    message = str(error)
+                elif isinstance(error, ValidationError):
+                    where = '.'.join(str(part) for part in error.errors()[0]['loc'])
+                    message = f'기획안 형식을 확인해주세요 (항목: {where}).'
+                else:
+                    message = '기획안 형식을 확인해주세요.'
+                self.send_json(HTTPStatus.BAD_REQUEST, {'error': message})
+                return
+            self.send_json(HTTPStatus.OK, result)
             return
         if self.path == '/api/analysis/runs':
             origin = self.headers.get('Origin')

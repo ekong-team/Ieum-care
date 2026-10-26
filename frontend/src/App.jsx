@@ -4,6 +4,7 @@ import useWelfare from "./useWelfare.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Analysis from "./components/Analysis.jsx";
 import Planning from "./components/Planning.jsx";
+import Evaluation from "./components/Evaluation.jsx";
 import {
   AnalysisPanels,
   Filters,
@@ -103,7 +104,7 @@ export default function App() {
       </header>
       <main id="main" tabIndex={-1}>
         <section
-          hidden={["recommendations", "planning", "dashboard", "analysis"].includes(page)}
+          hidden={["recommendations", "planning", "evaluation", "dashboard", "analysis"].includes(page)}
           aria-label={pages[page]}
         >
           <div className="page-heading">
@@ -124,6 +125,7 @@ export default function App() {
           />
         </div>
         <Planning active={page === "planning"} />
+        <Evaluation active={page === "evaluation"} />
         <Analysis active={page === 'analysis'} model={model} openRecommendations={(entry) => {
           model.selectEntry(entry);
           location.hash = '#recommendations';
