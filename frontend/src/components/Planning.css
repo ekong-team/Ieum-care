@@ -118,6 +118,17 @@
   resize: vertical;
   line-height: 1.8;
 }
+/* 평가·예산 화면(Evaluation.jsx): 기획안 JSON 편집칸과 폼 안의 평가 방식 선택 */
+.planning-form textarea.evaluation-json {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.planning-form .planning-mode input[type="radio"] {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+}
 .planning-form input::placeholder, .planning-form textarea::placeholder {
   color: #8a968f;
 }
