@@ -62,7 +62,20 @@ ai/nodes/       노드별 계산 (그래프는 이 함수들을 Engines로 꽂�
 - 통합 실행은 한 번에 하나만 돈다. live 실행은 복지 추천·분석과 같은 `LIVE_SLOT`을 쓰고, 키가 없으면 503으로 시작하지 않는다.
 - 오류 코드: 400 입력, 404 실행·요청 없음, 409 다른 실행 진행 중, 413 크기, 415 형식, 503 키 설정.
 - 테스트: `tests/test_pipeline_api.py`(백엔드), `frontend/src/components/Planning.test.jsx`(화면).
-- 남은 일: `POST /api/program/evaluate`(평가·예산 탭의 담당자 기획안 평가), 대시보드 집단 클릭 → 통합 실행 연결.
+- 남은 일: 대시보드 집단 클릭 → 통합 실행 연결.
+
+## 담당자 기획안 평가 API·화면 (2026-10-26)
+
+| 메서드·경로 | 역할 |
+| --- | --- |
+| `POST /api/program/evaluate` | 200 + 평가 결과. 본문은 `{"mode", "run_id", "plan"}` |
+
+- 기준은 **완료된 저장 실행**이다. 그 실행의 대상 프로필·원인 가설·기존 자원·공백·참고 사례로 기획안 하나를 채점한다. 그래프를 다시 돌리지 않고 복지 검색·사례 검색도 다시 하지 않는다.
+- 기획안의 `source`는 서버가 `manual`로 바꾼다. 담당자 기획안은 근거 검증 대신 형식 검증(Pydantic)만 한다(설계 5.3). 기획안 대상(지역·연령·성별)이 기준 실행과 다르면 400이다.
+- `offline`이면 규칙 5축만 채점해 100점으로 환산한다. `live`면 실현 가능성 축을 Gemini 1회로 채점하고 `LIVE_SLOT`을 함께 쓴다.
+- 응답: `plan`(manual로 바뀐 기획안), `evaluation`, `original_evaluation`(같은 `plan_id`의 원안 평가, 없으면 null), `external_calls`, `warnings`.
+- 화면: 평가·예산 탭(`frontend/src/components/Evaluation.jsx`). 저장된 실행 선택 → 기획안을 JSON으로 불러와 수정 → 평가 → 원안과 축별 비교.
+- 테스트: `tests/test_pipeline_api.py`의 `ManualEvaluateApiTests`, `frontend/src/components/Evaluation.test.jsx`.
 
 ## 가짜 노드를 실제 구현으로 바꾸는 법
 
@@ -111,4 +124,4 @@ python -m unittest tests.test_contracts tests.test_welfare_bridge tests.test_gra
 python -m ai.graph.demo
 ```
 
-데모의 기획·평가는 여전히 [가짜] 구현이다. 실제 위험도 자동 수신·프로그램 기획·집단 우선순위를 완성한 실행이 아니다.
+데모는 offline으로 실행된다. 기획 생성은 외부 호출을 하지 않도록 [가짜] 기획안을 쓰고, 평가는 실제 규칙 5축으로 채점한다(실현 가능성 축 없이 100점 환산). 실제 Gemini·Tavily로 끝까지 실행한 결과는 [실제 호출 검증 보고서](validation_report.md)에 있다.

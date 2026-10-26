@@ -311,7 +311,7 @@ v0.1의 `program-plan-0.1` 구조를 유지한다. 핵심 필드는 다음과 �
 | `POST /api/pipeline/runs` | 전체 그래프 실행 시작, `run_id` 반환 | 입력: TargetProfile. 백그라운드 스레드에서 실행 |
 | `GET /api/pipeline/runs/{run_id}?after_seq=N` | 상태(running·done·failed), N 이후 TraceEvent, 완료 시 전체 결과 | 화면이 1초 간격 조회 |
 | `GET /api/pipeline/saved` | 저장된 실행 결과 목록 | **시연·리허설용 다시 보기 (필수)** |
-| `POST /api/program/evaluate` | 평가만 실행 (담당자 기획안) | 입력: ProgramPlan + TargetProfile |
+| `POST /api/program/evaluate` | 평가만 실행 (담당자 기획안) | 입력: `run_id` + ProgramPlan. 저장된 실행의 원인·기존 자원·공백·사례를 기준으로 쓴다 (2026-10-26 변경: TargetProfile만으로는 신규성·근거성 축을 채점할 수 없음) |
 | `GET /api/welfare/status` | **기존 그대로** (키 설정 여부·모델명) | 기존 화면 `app.js`가 사용 |
 | `POST /api/welfare/recommendations` | **기존 그대로** (`mode: live/offline` 포함) | 기존 화면 호환 |
 | (여유 시) `GET /api/overview` | 전체 집단 위험 현황·1차 우선순위 | 데이터 어댑터 연결 후 |
@@ -340,7 +340,7 @@ python backend/server.py   # 기존과 동일
 | 분석 | 집단별 신호·근거 수치 상세 | 데이터 담당 |
 | 복지자원 추천 | **기존 화면 유지** | 장현지 (완료) |
 | 프로그램 기획 | **통합 실행 화면**: 대상 입력 → 진행 타임라인 → 결과 탭 | 김정욱 |
-| 평가·예산 | 담당자 기획안 입력·평가, 전후 비교 | 김정욱·김한수 |
+| 평가·예산 | 저장된 실행의 기획안을 JSON으로 고쳐 평가, 원안과 축별 비교 | 김정욱 |
 
 통합 실행 화면의 구성은 다음과 같다.
 1. **대상 입력**: 직접 입력(지역·연령·성별·원인·근거 수치) 또는 대시보드에서 선택한 집단.
@@ -376,6 +376,7 @@ docs/system_design.md    # 본 문서
 | ④-B 프로그램 기획(트렌드 검색·공백 분석·기획 생성·근거 검증) | 김정욱 | 구현 (`jeongwook/plan-generate`) |
 | ⑤ 평가 노드 전체(규칙 5축·예산 축·LLM 실현 가능성 축) | 김정욱 | 구현 (`jeongwook/evaluate`), 규칙은 [evaluation_rules.md](evaluation_rules.md) |
 | 통합 실행 화면·백엔드 경로 | 김정욱 | 구현 (`jeongwook/integration`), [AI 흐름 안내](ai_pipeline.md) 통합 실행 절 |
+| 평가·예산 화면, 담당자 기획안 평가 API | 김정욱 | 구현 (`jeongwook/manual-evaluate`), [AI 흐름 안내](ai_pipeline.md) 담당자 기획안 평가 절 |
 | ①② 데이터 재분석, 어댑터(→ TargetProfile) | 장현지·김한수 | 정제 파이프라인, 위험 규칙 v1 |
 | ③ 원인 분석 규칙(신호 → 원인 코드) | 장현지 + 김정욱 | 원인 코드 초안 |
 | ④-A 복지 추천 노드 연결 | 김정욱 (기존 함수 감싸기) | 복지 추천 Agent 완료 |
