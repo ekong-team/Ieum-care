@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import {
   buildSecondReview,
   buildPlanningRequest,
+  localTime,
   saveResults,
   restoreResults,
   STORAGE_KEY,
@@ -123,4 +124,13 @@ test("브라우저 저장은 같은 배치·조건·실시간 결과만 복원�
       },
     }),
   ).toThrow("quota");
+});
+
+test("서버 기록 시각을 현지 시각으로 보여 주고, 읽지 못하면 원문을 둔다", () => {
+  const utc = "2026-10-26T08:12:00+00:00";
+  const local = new Date(utc);
+  const pad = (n) => String(n).padStart(2, "0");
+  expect(localTime(utc)).toBe(`2026-10-${pad(local.getDate())} ${pad(local.getHours())}:12`);
+  expect(localTime("2026-10-26T10:00:00")).toBe("2026-10-26 10:00");
+  expect(localTime("알 수 없음")).toBe("알 수 없음");
 });

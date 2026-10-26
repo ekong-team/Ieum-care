@@ -25,6 +25,13 @@ export const relevanceLabels = {
 };
 export const targetLabel = (target) =>
   `${target.region} · ${ageLabel(target.age_group)} · ${sexLabel(target.sex)}`;
+// 서버 기록 시각(UTC ISO)을 담당자 PC의 현지 시각 "YYYY-MM-DD HH:mm"으로 보여 준다. 읽지 못하면 원문 그대로.
+export function localTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 export const STORAGE_KEY = "ieum-welfare-results-v1";
 
 export function downloadJSON(data, filename) {
