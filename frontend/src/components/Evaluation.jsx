@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, post, targetLabel } from "../domain.js";
+import { api, localTime, post, targetLabel } from "../domain.js";
 import "./Planning.css";
 
 // 설계 문서 7장 평가·예산 화면: 저장된 실행의 기획안을 불러와 담당자가 고치고, 같은 기준으로 다시 채점해 원안과 비교한다.
@@ -28,7 +28,7 @@ function Comparison({ result }) {
           {result.mode === "live" ? "실제 평가" : "예시 평가 (실현 가능성 축 없이 100점 환산)"} · 기준 실행 {result.run_id}
         </span>
       </div>
-      <div className="review-table-wrap">
+      <div className="review-table-wrap evaluation-compare">
         <table className="score-table">
           <thead>
             <tr>
@@ -187,7 +187,7 @@ export default function Evaluation({ active }) {
                 <li key={item.run_id}>
                   <button type="button" className="text-button" disabled={busy} onClick={() => openRun(item.run_id)}>
                     {targetLabel(item.target)} · {item.mode === "live" ? "실제" : "예시"} ·{" "}
-                    {item.started_at.slice(0, 16).replace("T", " ")}
+                    {localTime(item.started_at)}
                   </button>
                   {run?.run_id === item.run_id && <strong> 선택됨</strong>}
                 </li>
@@ -244,7 +244,7 @@ export default function Evaluation({ active }) {
               </button>
             </>
           ) : (
-            <p className="muted">왼쪽에서 기준 실행을 고르면 그 실행의 기획안을 불러옵니다.</p>
+            <p className="muted">1번에서 기준 실행을 고르면 그 실행의 기획안을 불러옵니다.</p>
           )}
           <p className="muted" role="status">
             {message}

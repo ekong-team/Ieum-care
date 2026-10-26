@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api, post, targetLabel } from "../domain.js";
+import { api, localTime, post, targetLabel } from "../domain.js";
 import "./Planning.css";
 
 // 설계 문서 7장 통합 실행 화면: 대상 입력 → 진행 타임라인 → 결과 탭 → 내보내기·다시 보기.
@@ -920,7 +920,7 @@ export default function Planning({ active }) {
                   <li key={item.run_id}>
                     <button type="button" className="text-button" disabled={running} onClick={() => openSaved(item.run_id)}>
                       {targetLabel(item.target)} · {item.mode === "live" ? "실제" : "예시"} ·{" "}
-                      {item.started_at.slice(0, 16).replace("T", " ")}
+                      {localTime(item.started_at)}
                     </button>
                     <span className="muted"> {item.summary}</span>
                   </li>
